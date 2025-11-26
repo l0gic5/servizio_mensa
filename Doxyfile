@@ -1,0 +1,42 @@
+# Doxyfile 1.9.1
+
+PROJECT_NAME = "Servizio Mensa"
+PROJECT_NUMBER = "1.0"
+PROJECT_BRIEF = "SO final project"
+
+# input
+INPUT = ./src \
+        ./README.md
+FILE_PATTERNS = *.h *.c
+RECURSIVE = YES
+EXCLUDE = ./test
+
+# output
+OUTPUT_DIRECTORY = "./docs"
+GENERATE_HTML = YES
+GENERATE_LATEX = NO
+
+# extraction
+EXTRACT_ALL = YES
+EXTRACT_STATIC = NO
+EXTRACT_LOCAL_CLASSES = YES
+
+
+# style
+HTML_EXTRA_STYLESHEET = ./docs/doxygen-awesome-css/doxygen-awesome.css
+HTML_EXTRA_FILES = \
+  ./docs/doxygen-awesome-css/doxygen-awesome-darkmode-toggle.js \
+  ./docs/doxygen-awesome-css/doxygen-awesome-sidebar-only.js
+
+USE_MDFILE_AS_MAINPAGE = ./README.md
+
+HTML_DYNAMIC_MENUS = YES
+GENERATE_TREEVIEW = YES
+DISABLE_INDEX = NO
+FULL_PATH_NAMES = NO
+SHOW_USED_FILES = NO
+
+MARKDOWN_SUPPORT = YES
+AUTOLINK_SUPPORT = YES
+SOURCE_BROWSER = YES
+INLINE_SOURCES = NO
