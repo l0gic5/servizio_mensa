@@ -8,7 +8,7 @@ int main(int argc, char *argv[]) {
     (void)argc; (void)argv; // Silenzia warning per parametri inutilizzati
     
     // Esempio di utilizzo del Logger
-    LOG_INFO("CASSA", "Processo Cassa avviato (PID: %d)", getpid());
+    LOG_INFO("CASSA", "Processo Cassa avviato");
 
     // Qui andrà il loop principale della cassa
     // while(running) { ... }

@@ -7,16 +7,19 @@
 #include <string.h>
 #include <unistd.h>
 
-#define RED "\x1b[31m"
-#define GREEN "\x1b[32m"
-#define YELLOW "\x1b[33m"
-#define BLUE "\x1b[34m"
-#define RESET "\x1b[0m"
+#define COLOR_RED "\x1b[31m"
+#define COLOR_GREEN "\x1b[32m"
+#define COLOR_YELLOW "\x1b[33m"
+#define COLOR_BLUE "\x1b[34m"
+#define COLOR_PURPLE "\x1b[35m"
+#define COLOR_CYAN "\x1b[36m"
+#define COLOR_RESET "\x1b[0m"
 
 #define TEST_ERROR                                                             \
   if (errno) {                                                                 \
-    fprintf(stderr, RED "%s:%d: PID=%5d: Errore %d (%s)" RESET "\n", __FILE__, \
-            __LINE__, getpid(), errno, strerror(errno));                       \
+    fprintf(stderr,                                                            \
+            COLOR_RED "%s:%d: PID=%5d: Errore %d (%s)" COLOR_RESET "\n",       \
+            __FILE__, __LINE__, getpid(), errno, strerror(errno));             \
   }
 
 #define EXIT_ON_ERROR                                                          \
@@ -26,15 +29,19 @@
   }
 
 #define LOG_INFO(ctx, msg, ...)                                                \
-  fprintf(stdout, GREEN "[%s][%d] " msg RESET "\n", ctx, getpid(),             \
-          ##__VA_ARGS__)
+  fprintf(stdout, COLOR_GREEN "[%s]" COLOR_PURPLE "(%d)" COLOR_RESET msg "\n", \
+          ctx, getpid(), ##__VA_ARGS__)
 
 #define LOG_WARN(ctx, msg, ...)                                                \
-  fprintf(stdout, YELLOW "[%s][%d] WARNING: " msg RESET "\n", ctx, getpid(),   \
-          ##__VA_ARGS__)
+  fprintf(stdout,                                                              \
+          COLOR_YELLOW "[%s]" COLOR_PURPLE "(%d)" COLOR_YELLOW                 \
+                       " WARNING: " msg COLOR_RESET "\n",                      \
+          ctx, getpid(), ##__VA_ARGS__)
 
 #define LOG_ERR(ctx, msg, ...)                                                 \
-  fprintf(stderr, RED "[%s][%d] ERROR: " msg RESET "\n", ctx, getpid(),        \
-          ##__VA_ARGS__)
+  fprintf(stderr,                                                              \
+          COLOR_RED "[%s]" COLOR_PURPLE "(%d)" COLOR_RED                       \
+                    " ERROR: " msg COLOR_RESET "\n",                           \
+          ctx, getpid(), ##__VA_ARGS__)
 
 #endif

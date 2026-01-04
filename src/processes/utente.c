@@ -6,7 +6,7 @@
 int main(int argc, char *argv[]) {
     (void)argc; (void)argv;
 
-    LOG_INFO("UTENTE", "Processo Utente avviato (PID: %d)", getpid());
+    LOG_INFO("UTENTE", "Processo Utente avviato");
     
     return 0;
 }
