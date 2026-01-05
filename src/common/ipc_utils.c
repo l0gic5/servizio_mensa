@@ -4,11 +4,7 @@
 key_t get_project_ipc_key(int project_id) {
   char path[256];
 
-#if defined(__linux__) || defined(__APPLE__)
   snprintf(path, sizeof(path), "/tmp/%s", IPC_FILENAME);
-#else
-  snprintf(path, sizeof(path), "/var/tmp/%s", IPC_FILENAME);
-#endif
 
   int fd = open(path, O_CREAT | O_RDWR, 0666);
   if (fd < 0) {

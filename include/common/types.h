@@ -22,7 +22,23 @@
 // evita printf accavallate
 #define SEM_INDEX_OUTPUT 6
 
-#define TOTAL_SEMS 7
+#define SEM_OPERATORS_PRIMI 7
+#define SEM_OPERATORS_SECONDI 8
+#define SEM_OPERATORS_COFFEE 9
+#define SEM_OPERATORS_CASSA 10
+
+#define TOTAL_SEMS 11
+
+#define MAX_WORKERS 100
+
+#define MSG_TYPE_ORDER_PRIMI 1
+#define MSG_TYPE_ORDER_SECONDI 2
+#define MSG_TYPE_ORDER_COFFEE 3
+
+typedef struct {
+  // indice worker -> enum OpType
+  int worker_roles[MAX_WORKERS];
+} WorkerConfig;
 
 ///////////////////
 //  STATISTICHE  //
@@ -60,5 +76,13 @@ typedef struct message_request {
   int wants_ticket;
   double total_cost;
 } MessageRequest;
+
+typedef struct message_response {
+  // PID destinatario
+  long mtype;
+  pid_t operator_pid;
+} MessageResponse;
+
+typedef enum { OP_PRIMI = 0, OP_SECONDI, OP_COFFEE, OP_CASSA } OpType;
 
 #endif

@@ -3,10 +3,10 @@
 
 #include "common/logger.h"
 #include <ctype.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdbool.h>
 
 #define MAX_LINE_LENGTH 512
 
@@ -14,9 +14,12 @@ typedef struct config {
   // OVERLOAD_THRESHOLD
   int overload_threshold;
 
+  // MINUTI_SERVIZIO_GIORNALIERO
+  int minuti_servizio_giornaliero;
+
   // N_NANO_SECS
   int n_nano_secs;
-  
+
   // SIM_DURATION
   int sim_duration;
   // NOF_USERS
@@ -35,6 +38,24 @@ typedef struct config {
   int avg_service_coffee;
   // AVG_SRVC_CASSA
   int avg_service_cassa;
+
+  // postazioni fisiche operatori
+  // WORKSTATIONS_PRIMI
+  int workstations_primi;
+  // WORKSTATIONS_SECONDI
+  int workstations_secondi;
+  // WORKSTATIONS_COFFEE
+  int workstations_coffee;
+  // WORKSTATIONS_CASSA
+  int workstations_cassa;
+
+  // pause operatori
+  // MAX_PAUSES_PER_DAY
+  int max_pauses_per_day;
+  // PAUSE_DURATION_NS
+  int pause_duration_ns;
+  // PAUSE_PROBABILITY_PERCENT
+  int pause_probability_percent;
 
   // capacità code stazioni
   // NOF_WK_SEATS_PRIMI
@@ -63,6 +84,15 @@ typedef struct config {
   int max_porzioni_primi;
   // MAX_PORZIONI_SECONDI
   int max_porzioni_secondi;
+
+  // VARIABILITY_PRIMI
+  int variability_primi;
+  // VARIABILITY_SECONDI
+  int variability_secondi;
+  // VARIABILITY_COFFEE
+  int variability_coffee;
+  // VARIABILITY_CASSA
+  int variability_cassa;
 } Config;
 
 /**
