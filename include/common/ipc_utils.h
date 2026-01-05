@@ -28,6 +28,7 @@ union semun {
 #define FTOK_SHM_ID 'M'
 #define FTOK_SEM_ID 'S'
 #define FTOK_MSG_ID 'Q'
+#define FTOK_SHM_ROLES_ID 'R'
 
 /**
  * @brief Genera e restituisce la chiave IPC del progetto.
@@ -47,9 +48,10 @@ key_t get_project_ipc_key(int project_id);
  * @brief Crea o ottiene un segmento di memoria condivisa.
  *
  * @param size Dimensione del segmento in byte
+ * @param project_id Identificativo del progetto ['M', 'S', 'Q', 'R']
  * @return ID del segmento di memoria condivisa, -1 in caso di errore
  */
-int allocate_shm(size_t size);
+int allocate_shm(size_t size, int project_id);
 
 /**
  * @brief Attacca un segmento di memoria condivisa al processo.

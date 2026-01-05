@@ -24,8 +24,8 @@ key_t get_project_ipc_key(int project_id) {
 //  SHARED MEMORY  //
 /////////////////////
 
-int allocate_shm(size_t size) {
-  key_t key = get_project_ipc_key(FTOK_SHM_ID);
+int allocate_shm(size_t size, int project_id) {
+  key_t key = get_project_ipc_key(project_id);
   if (key == -1) {
     return -1;
   }
@@ -49,17 +49,27 @@ void *attach_shm(int shm_id) {
 }
 
 int detach_shm(void *ptr) {
+  if (ptr == NULL) {
+    return 0;
+  }
+
   int res = shmdt(ptr);
+  // ignora EINVAL (22)
   if (res == -1) {
-    TEST_ERROR;
+    if (errno != EINVAL) {
+      TEST_ERROR;
+    }
   }
   return res;
 }
 
 int remove_shm(int shm_id) {
   int res = shmctl(shm_id, IPC_RMID, NULL);
+  // ignora EINVAL (ID non valido) e EIDRM (ID già rimosso)
   if (res == -1) {
-    TEST_ERROR;
+    if (errno != EINVAL && errno != EIDRM) {
+      TEST_ERROR;
+    }
   }
   return res;
 }
@@ -70,10 +80,26 @@ int remove_shm(int shm_id) {
 
 int create_sem_set(int num_sems) {
   key_t key = get_project_ipc_key(FTOK_SEM_ID);
-  if (key == -1)
+  if (key == -1) {
     return -1;
+  }
 
   int id = semget(key, num_sems, IPC_CREAT | 0666);
+
+  // gestione Errore 22 (EINVAL):
+  if (id == -1 && errno == EINVAL) {
+    fprintf(stderr, "IPC WARN: Rilevato set semafori vecchio/incompatibile. "
+                    "Rimozione e ricreazione...\n");
+
+    int old_id = semget(key, 0, 0666);
+
+    if (old_id != -1) {
+      semctl(old_id, 0, IPC_RMID);
+    }
+
+    id = semget(key, num_sems, IPC_CREAT | 0666);
+  }
+
   if (id == -1) {
     TEST_ERROR;
   }
@@ -128,7 +154,9 @@ int remove_sem_set(int sem_id) {
   // 0 è ignorato con IPC_RMID
   int res = semctl(sem_id, 0, IPC_RMID);
   if (res == -1) {
-    TEST_ERROR;
+    if (errno != EINVAL && errno != EIDRM) {
+      TEST_ERROR;
+    }
   }
   return res;
 }
