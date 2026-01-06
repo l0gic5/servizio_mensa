@@ -252,8 +252,7 @@ void service_cycle(int msg_id, int sem_id, int sem_index, long avg_time,
   while (!g_day_ended && !ended) {
     MessageRequest req;
 
-    int res =
-        receive_message(msg_id, &req, sizeof(req.food_choice), msg_type, 0);
+    int res = receive_message(msg_id, &req, REQ_PAYLOAD_SIZE, msg_type, 0);
 
     if (res != -1) {
 
@@ -304,8 +303,7 @@ int main(int argc, char *argv[]) {
   srand((unsigned int)time(NULL) ^ (unsigned int)getpid());
 
   if (argc < 3) {
-    fprintf(stderr, "Parameters Error: %s <operator_id> <config_path>\n",
-            argv[0]);
+    fprintf(stderr, "Usage: %s <operator_id> <config_path>\n", argv[0]);
     exit(EXIT_FAILURE);
   }
 

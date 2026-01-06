@@ -145,14 +145,14 @@ int perform_order(OpType type, int msg_type, double amount) {
     LOG_INFO("UTENTE", "Ordino %s...", ROLE_NAME(type));
   }
 
-  if (send_message(g_msg_id, &req, sizeof(req.food_choice), 0) == -1) {
+  if (send_message(g_msg_id, &req, REQ_PAYLOAD_SIZE, 0) == -1) {
     LOG_ERR("UTENTE", "Errore invio richiesta %s", ROLE_NAME(type));
     return -1;
   }
 
   MessageResponse resp;
   // msgrcv bloccante su mtype = mio PID
-  int bytes = receive_message(g_msg_id, &resp, sizeof(pid_t), getpid(), 0);
+  int bytes = receive_message(g_msg_id, &resp, RES_PAYLOAD_SIZE, getpid(), 0);
 
   if (bytes == -1) {
     // se fallisce (es. fine giornata mentre aspetto):
@@ -163,12 +163,11 @@ int perform_order(OpType type, int msg_type, double amount) {
     return -1;
   }
 
-  if (type == OP_CASSA) {
-    // scontrino stampato in user_routine dopo il return
-  } else {
+  if (type != OP_CASSA) {
     LOG_INFO("UTENTE", "Ricevuto un %s da Operatore %d.",
              ROLE_NAME_SINGULAR(type), resp.operator_pid);
   }
+  // ELSE scontrino stampato in user_routine dopo il return
 
   return 0;
 }
@@ -318,7 +317,8 @@ int main(int argc, char *argv[]) {
   double my_budget =
       random_range(config.user_budget_min, config.user_budget_max, rand);
 
-  LOG_INFO("UTENTE", "Cliente arrivato in mensa.");
+  LOG_INFO("UTENTE", "Cliente arrivato in mensa. Patrimonio iniziale: %.2f€",
+           my_budget);
 
   for (int day = 1; day <= config.simulation_duration_days && g_running;
        day++) {
