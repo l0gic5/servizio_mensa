@@ -28,20 +28,28 @@
     exit(EXIT_FAILURE);                                                        \
   }
 
+#define ROLE_NAME(r)                                                           \
+  ((r) == 0   ? "PRIMI"                                                        \
+   : (r) == 1 ? "SECONDI"                                                      \
+   : (r) == 2 ? "COFFEE"                                                       \
+   : (r) == 3 ? "CASSA"                                                        \
+              : "IGNOTO")
+
 #define LOG_INFO(ctx, msg, ...)                                                \
-  fprintf(stdout, COLOR_GREEN "[%s]" COLOR_PURPLE "(%d)" COLOR_RESET msg "\n", \
-          ctx, getpid(), ##__VA_ARGS__)
+  fprintf(stdout,                                                              \
+          COLOR_GREEN "[%s]" COLOR_PURPLE "(%d) " COLOR_RESET msg "\n", ctx,   \
+          getpid(), ##__VA_ARGS__)
 
 #define LOG_WARN(ctx, msg, ...)                                                \
   fprintf(stdout,                                                              \
-          COLOR_YELLOW "[%s]" COLOR_PURPLE "(%d)" COLOR_YELLOW                 \
-                       " WARNING: " msg COLOR_RESET "\n",                      \
+          COLOR_YELLOW "[%s]" COLOR_PURPLE "(%d) " COLOR_YELLOW                \
+                       "WARNING: " msg COLOR_RESET "\n",                      \
           ctx, getpid(), ##__VA_ARGS__)
 
 #define LOG_ERR(ctx, msg, ...)                                                 \
   fprintf(stderr,                                                              \
-          COLOR_RED "[%s]" COLOR_PURPLE "(%d)" COLOR_RED                       \
-                    " ERROR: " msg COLOR_RESET "\n",                           \
+          COLOR_RED "[%s]" COLOR_PURPLE "(%d) " COLOR_RED                      \
+                    "ERROR: " msg COLOR_RESET "\n",                           \
           ctx, getpid(), ##__VA_ARGS__)
 
 #endif
