@@ -153,11 +153,11 @@ void set_role_parameters(OpType role, const Config *config,
     *msg_type_req = MSG_TYPE_ORDER_SECONDI;
     *range_percent = config->variability_secondi;
     break;
-  case OP_COFFEE:
-    *avg_service_time = config->avg_service_coffee;
-    *sem_workstation_index = SEM_OPERATORS_COFFEE;
-    *msg_type_req = MSG_TYPE_ORDER_COFFEE;
-    *range_percent = config->variability_coffee;
+  case OP_CAFFE:
+    *avg_service_time = config->avg_service_caffe;
+    *sem_workstation_index = SEM_OPERATORS_CAFFE;
+    *msg_type_req = MSG_TYPE_ORDER_CAFFE;
+    *range_percent = config->variability_caffe;
     break;
   case OP_CASSA:
     *avg_service_time = config->avg_service_cassa;
@@ -214,7 +214,7 @@ void attempt_pause(int sem_id, int sem_workstation_index, int *pauses_done,
     nanosleep(&t_pause, NULL);
     (*pauses_done)++;
 
-    LOG_INFO("OPERATORE", "Fine pausa. Attendo bancone...");
+    LOG_INFO("OPERATORE", "Fine pausa. Attendo postazione...");
     if (sem_wait(sem_id, sem_workstation_index) == -1) {
       if (errno != EINTR) {
         LOG_ERR("OPERATORE", "Errore wait postazione");
@@ -278,8 +278,8 @@ void service_cycle(int msg_id, int sem_id, int sem_index, long avg_time,
       case OP_SECONDI:
         g_stats->plates_secondi++;
         break;
-      case OP_COFFEE:
-        g_stats->plates_coffee++;
+      case OP_CAFFE:
+        g_stats->plates_caffe++;
         break;
       default:
         break;

@@ -31,7 +31,7 @@
 #define ROLE_NAME(r)                                                           \
   ((r) == 0   ? "PRIMI"                                                        \
    : (r) == 1 ? "SECONDI"                                                      \
-   : (r) == 2 ? "COFFEE"                                                       \
+   : (r) == 2 ? "CAFFE"                                                       \
    : (r) == 3 ? "CASSA"                                                        \
               : "IGNOTO")
 

@@ -125,7 +125,7 @@ int setup_ipc(Statistics **out_stats) {
   // Init Semafori Code Utenti
   init_sem(g_sem_id, SEM_INDEX_SEATS_PRIMI, g_config.queue_capacity_primi);
   init_sem(g_sem_id, SEM_INDEX_SEATS_SECONDI, g_config.queue_capacity_secondi);
-  init_sem(g_sem_id, SEM_INDEX_SEATS_COFFEE, g_config.queue_capacity_coffee);
+  init_sem(g_sem_id, SEM_INDEX_SEATS_CAFFE, g_config.queue_capacity_caffe);
   init_sem(g_sem_id, SEM_INDEX_SEATS_CASSA, g_config.queue_capacity_cassa);
   init_sem(g_sem_id, SEM_INDEX_TABLES, g_config.nof_table_seats);
 
@@ -136,7 +136,7 @@ int setup_ipc(Statistics **out_stats) {
   // Init Semafori Workstations (Postazioni fisiche operatori)
   init_sem(g_sem_id, SEM_OPERATORS_PRIMI, g_config.workstations_primi);
   init_sem(g_sem_id, SEM_OPERATORS_SECONDI, g_config.workstations_secondi);
-  init_sem(g_sem_id, SEM_OPERATORS_COFFEE, g_config.workstations_coffee);
+  init_sem(g_sem_id, SEM_OPERATORS_CAFFE, g_config.workstations_caffe);
   init_sem(g_sem_id, SEM_OPERATORS_CASSA, g_config.workstations_cassa);
 
   return 0;
@@ -177,17 +177,17 @@ pid_t spawn_process(const char *path, char *const argv[]) {
  * cassa).
  * @param[in]  t_primi Tempo medio di servizio per i Primi (ns).
  * @param[in]  t_secondi Tempo medio di servizio per i Secondi (ns).
- * @param[in]  t_coffee Tempo medio di servizio per il Caffè (ns).
+ * @param[in]  t_caffe Tempo medio di servizio per il Caffè (ns).
  * @param[out] w_primi Puntatore dove scrivere il numero di worker assegnati ai
  * Primi.
  * @param[out] w_secondi Puntatore dove scrivere il numero di worker assegnati
  * ai Secondi.
- * @param[out] w_coffee Puntatore dove scrivere il numero di worker assegnati al
+ * @param[out] w_caffe Puntatore dove scrivere il numero di worker assegnati al
  * Caffè.
  */
 void compute_workers_distribution(int available_workers, int t_primi,
-                                  int t_secondi, int t_coffee, int *w_primi,
-                                  int *w_secondi, int *w_coffee) {
+                                  int t_secondi, int t_caffe, int *w_primi,
+                                  int *w_secondi, int *w_caffe) {
 
   if (available_workers < 3) {
     LOG_ERR("RESPONSABILE", "Troppi pochi worker! Configurazione impossibile.");
@@ -197,21 +197,21 @@ void compute_workers_distribution(int available_workers, int t_primi,
   // di default: 1 per tutti
   *w_primi = 1;
   *w_secondi = 1;
-  *w_coffee = 1;
+  *w_caffe = 1;
 
   int to_assign = available_workers - 3;
 
   while (to_assign > 0) {
     double load_primi = (double)t_primi / (*w_primi);
     double load_secondi = (double)t_secondi / (*w_secondi);
-    double load_coffee = (double)t_coffee / (*w_coffee);
+    double load_caffe = (double)t_caffe / (*w_caffe);
 
-    if (load_primi >= load_secondi && load_primi >= load_coffee) {
+    if (load_primi >= load_secondi && load_primi >= load_caffe) {
       (*w_primi)++;
-    } else if (load_secondi >= load_primi && load_secondi >= load_coffee) {
+    } else if (load_secondi >= load_primi && load_secondi >= load_caffe) {
       (*w_secondi)++;
     } else {
-      (*w_coffee)++;
+      (*w_caffe)++;
     }
     to_assign--;
   }
@@ -254,17 +254,17 @@ void start_all_processes(const char *config_path) {
   int current_worker_id = 0;
 
   int w_cassa = 1;
-  int w_primi, w_secondi, w_coffee;
+  int w_primi, w_secondi, w_caffe;
 
   compute_workers_distribution(
       g_config.nof_workers - w_cassa, g_config.avg_service_primi,
-      g_config.avg_service_secondi, g_config.avg_service_coffee, &w_primi,
-      &w_secondi, &w_coffee);
+      g_config.avg_service_secondi, g_config.avg_service_caffe, &w_primi,
+      &w_secondi, &w_caffe);
 
   LOG_INFO("RESPONSABILE",
            "Distribuzione Iniziale:\n  - Cassa: %d\n  - Primi: %d\n  - "
            "Secondi: %d\n  - Caffè: %d",
-           w_cassa, w_primi, w_secondi, w_coffee);
+           w_cassa, w_primi, w_secondi, w_caffe);
 
   // spawn Workers
   spawn_worker_group(OP_CASSA, w_cassa, PATH_CASSA, config_path,
@@ -273,7 +273,7 @@ void start_all_processes(const char *config_path) {
                      &current_worker_id, &pid_index);
   spawn_worker_group(OP_SECONDI, w_secondi, PATH_OPERATORE, config_path,
                      &current_worker_id, &pid_index);
-  spawn_worker_group(OP_COFFEE, w_coffee, PATH_OPERATORE, config_path,
+  spawn_worker_group(OP_CAFFE, w_caffe, PATH_OPERATORE, config_path,
                      &current_worker_id, &pid_index);
 
   // spawn Utenti
@@ -300,10 +300,10 @@ void print_daily_stats(int day, Statistics *stats) {
   printf("Piatti Serviti in totale: %d\n", stats->total_users_served);
   printf("Utenti Respinti/Overload: %d\n", stats->total_users_refused);
   printf("Piatti Distribuiti:\n  - Primi: %d\n  - Secondi: %d\n  - Caffè: %d\n",
-         stats->plates_primi, stats->plates_secondi, stats->plates_coffee);
+         stats->plates_primi, stats->plates_secondi, stats->plates_caffe);
   printf("Piatti Avanzati:\n  - Primi: %d\n  - Secondi: %d\n  - Caffè: %d\n",
          stats->leftover_primi, stats->leftover_secondi,
-         stats->leftover_coffee);
+         stats->leftover_caffe);
   printf("Ricavo Totale: %.2f€\n", stats->total_revenue);
   printf(COLOR_BLUE "=================================" COLOR_RESET "\n\n");
 
@@ -332,7 +332,7 @@ void run_simulation_loop(Statistics *stats) {
       int w_p, w_s, w_c;
       compute_workers_distribution(
           g_config.nof_workers - w_cassa, g_config.avg_service_primi,
-          g_config.avg_service_secondi, g_config.avg_service_coffee, &w_p, &w_s,
+          g_config.avg_service_secondi, g_config.avg_service_caffe, &w_p, &w_s,
           &w_c);
 
       int index = 1; // Salta cassa
@@ -343,7 +343,7 @@ void run_simulation_loop(Statistics *stats) {
         g_worker_config->worker_roles[index++] = OP_SECONDI;
       }
       for (int k = 0; k < w_c; k++) {
-        g_worker_config->worker_roles[index++] = OP_COFFEE;
+        g_worker_config->worker_roles[index++] = OP_CAFFE;
       }
 
       LOG_INFO("RESPONSABILE",

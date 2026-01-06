@@ -96,8 +96,8 @@ static void apply_config_parameter(Config *config, const char *key,
     config->queue_capacity_primi = atoi(value);
   } else if (strcmp(key, "NOF_WK_SEATS_SECONDI") == 0) {
     config->queue_capacity_secondi = atoi(value);
-  } else if (strcmp(key, "NOF_WK_SEATS_COFFEE") == 0) {
-    config->queue_capacity_coffee = atoi(value);
+  } else if (strcmp(key, "NOF_WK_SEATS_CAFFE") == 0) {
+    config->queue_capacity_caffe = atoi(value);
   } else if (strcmp(key, "NOF_WK_SEATS_CASSA") == 0) {
     config->queue_capacity_cassa = atoi(value);
   }
@@ -106,8 +106,8 @@ static void apply_config_parameter(Config *config, const char *key,
     config->workstations_primi = atoi(value);
   } else if (strcmp(key, "WORKSTATIONS_SECONDI") == 0) {
     config->workstations_secondi = atoi(value);
-  } else if (strcmp(key, "WORKSTATIONS_COFFEE") == 0) {
-    config->workstations_coffee = atoi(value);
+  } else if (strcmp(key, "WORKSTATIONS_CAFFE") == 0) {
+    config->workstations_caffe = atoi(value);
   } else if (strcmp(key, "WORKSTATIONS_CASSA") == 0) {
     config->workstations_cassa = atoi(value);
   }
@@ -121,8 +121,8 @@ static void apply_config_parameter(Config *config, const char *key,
     config->avg_service_primi = atoi(value);
   } else if (strcmp(key, "AVG_SRVC_SECONDI") == 0) {
     config->avg_service_secondi = atoi(value);
-  } else if (strcmp(key, "AVG_SRVC_COFFEE") == 0) {
-    config->avg_service_coffee = atoi(value);
+  } else if (strcmp(key, "AVG_SRVC_CAFFE") == 0) {
+    config->avg_service_caffe = atoi(value);
   } else if (strcmp(key, "AVG_SRVC_CASSA") == 0) {
     config->avg_service_cassa = atoi(value);
   }
@@ -131,8 +131,8 @@ static void apply_config_parameter(Config *config, const char *key,
     config->variability_primi = atoi(value);
   } else if (strcmp(key, "VARIABILITY_SECONDI") == 0) {
     config->variability_secondi = atoi(value);
-  } else if (strcmp(key, "VARIABILITY_COFFEE") == 0) {
-    config->variability_coffee = atoi(value);
+  } else if (strcmp(key, "VARIABILITY_CAFFE") == 0) {
+    config->variability_caffe = atoi(value);
   } else if (strcmp(key, "VARIABILITY_CASSA") == 0) {
     config->variability_cassa = atoi(value);
   }
@@ -141,8 +141,8 @@ static void apply_config_parameter(Config *config, const char *key,
     config->price_primi = atoi(value);
   } else if (strcmp(key, "PRICE_SECONDI") == 0) {
     config->price_secondi = atoi(value);
-  } else if (strcmp(key, "PRICE_COFFEE") == 0) {
-    config->price_coffee = atoi(value);
+  } else if (strcmp(key, "PRICE_CAFFE") == 0) {
+    config->price_caffe = atoi(value);
   }
 
   //////////////////////////////////////////
@@ -173,8 +173,8 @@ static void apply_config_parameter(Config *config, const char *key,
     config->probability_user_wants_primo = atoi(value);
   } else if (strcmp(key, "PROBABILITY_USER_WANTS_SECONDO") == 0) {
     config->probability_user_wants_secondo = atoi(value);
-  } else if (strcmp(key, "PROBABILITY_USER_WANTS_COFFEE") == 0) {
-    config->probability_user_wants_coffee = atoi(value);
+  } else if (strcmp(key, "PROBABILITY_USER_WANTS_CAFFE") == 0) {
+    config->probability_user_wants_caffe = atoi(value);
   }
 
   // budget
@@ -256,8 +256,8 @@ static void set_default_values(Config *config) {
   if (config->queue_capacity_secondi == 0) {
     config->queue_capacity_secondi = 10;
   }
-  if (config->queue_capacity_coffee == 0) {
-    config->queue_capacity_coffee = 15;
+  if (config->queue_capacity_caffe == 0) {
+    config->queue_capacity_caffe = 15;
   }
   if (config->queue_capacity_cassa == 0) {
     config->queue_capacity_cassa = 15;
@@ -269,8 +269,8 @@ static void set_default_values(Config *config) {
   if (config->workstations_secondi == 0) {
     config->workstations_secondi = 5;
   }
-  if (config->workstations_coffee == 0) {
-    config->workstations_coffee = 5;
+  if (config->workstations_caffe == 0) {
+    config->workstations_caffe = 5;
   }
   if (config->workstations_cassa == 0) {
     config->workstations_cassa = 1;
@@ -287,8 +287,8 @@ static void set_default_values(Config *config) {
   if (config->avg_service_secondi == 0) {
     config->avg_service_secondi = 6000;
   }
-  if (config->avg_service_coffee == 0) {
-    config->avg_service_coffee = 2000;
+  if (config->avg_service_caffe == 0) {
+    config->avg_service_caffe = 2000;
   }
   if (config->avg_service_cassa == 0) {
     config->avg_service_cassa = 3000;
@@ -300,8 +300,8 @@ static void set_default_values(Config *config) {
   if (config->variability_secondi == 0) {
     config->variability_secondi = 50;
   }
-  if (config->variability_coffee == 0) {
-    config->variability_coffee = 80;
+  if (config->variability_caffe == 0) {
+    config->variability_caffe = 80;
   }
   if (config->variability_cassa == 0) {
     config->variability_cassa = 10;
@@ -313,8 +313,8 @@ static void set_default_values(Config *config) {
   if (config->price_secondi == 0) {
     config->price_secondi = 8;
   }
-  if (config->price_coffee == 0) {
-    config->price_coffee = 1;
+  if (config->price_caffe == 0) {
+    config->price_caffe = 1;
   }
 
   //////////////////////////////////////////
@@ -352,8 +352,8 @@ static void set_default_values(Config *config) {
   if (config->probability_user_wants_secondo == 0) {
     config->probability_user_wants_secondo = 60;
   }
-  if (config->probability_user_wants_coffee == 0) {
-    config->probability_user_wants_coffee = 30;
+  if (config->probability_user_wants_caffe == 0) {
+    config->probability_user_wants_caffe = 30;
   }
 
   // budget

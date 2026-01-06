@@ -38,7 +38,7 @@ Definisce il numero di attori e la capacità della sala.
 
 Dimensionamento delle risorse per ogni tipologia di servizio.
 
-> **Valori validi per `[TIPO]`: `PRIMI`, `SECONDI`, `COFFEE`, `CASSA`**
+> **Valori validi per `[TIPO]`: `PRIMI`, `SECONDI`, `CAFFE`, `CASSA`**
 
 | Chiave Config (`.conf`) | Variabile Struct C | Descrizione | Default |
 | --- | --- | --- | --- |
@@ -53,9 +53,9 @@ Attributi relativi all'erogazione del servizio.
 
 | Chiave Config (`.conf`) | Variabile Struct C | Suffix `[TIPO]` Accettati | Descrizione | Default |
 | --- | --- | --- | --- | --- |
-| **`AVG_SRVC_[TIPO]`** | `avg_service_[tipo]` | `PRIMI`<br>`SECONDI`<br>`COFFEE`<br>`CASSA` | Tempo medio base per servire una richiesta (ns simulati). | `5000` (Primi)<br>`6000` (Secondi)<br>`2000` (Caffè)<br>`3000` (Cassa) |
-| **`VARIABILITY_[TIPO]`** | `variability_[tipo]` | `PRIMI`<br>`SECONDI`<br>`COFFEE`<br>`CASSA` | Percentuale (0-100) di variabilità random. | `50` (Cibo)<br>`80` (Caffè)<br>`10` (Cassa) |
-| **`PRICE_[TIPO]`** | `price_[tipo]` | `PRIMI`<br>`SECONDI`<br>`COFFEE` | Prezzo di vendita del prodotto. | `5`, `8`, `1` |
+| **`AVG_SRVC_[TIPO]`** | `avg_service_[tipo]` | `PRIMI`<br>`SECONDI`<br>`CAFFE`<br>`CASSA` | Tempo medio base per servire una richiesta (ns simulati). | `5000` (Primi)<br>`6000` (Secondi)<br>`2000` (Caffè)<br>`3000` (Cassa) |
+| **`VARIABILITY_[TIPO]`** | `variability_[tipo]` | `PRIMI`<br>`SECONDI`<br>`CAFFE`<br>`CASSA` | Percentuale (0-100) di variabilità random. | `50` (Cibo)<br>`80` (Caffè)<br>`10` (Cassa) |
+| **`PRICE_[TIPO]`** | `price_[tipo]` | `PRIMI`<br>`SECONDI`<br>`CAFFE` | Prezzo di vendita del prodotto. | `5`, `8`, `1` |
 
 ---
 
@@ -75,7 +75,7 @@ Configurazione della "resistenza" e delle abitudini lavorative degli operatori.
 
 Rende la simulazione dinamica controllando le decisioni e la pazienza degli utenti.
 
-> **Valori validi per `[TIPO]`: `PRIMO`, `SECONDO`, `COFFEE` (Notare il singolare)**
+> **Valori validi per `[TIPO]`: `PRIMO`, `SECONDO`, `CAFFE` (Notare il singolare)**
 
 | Chiave Config (`.conf`) | Variabile Struct C | Descrizione | Default |
 | --- | --- | --- | --- |

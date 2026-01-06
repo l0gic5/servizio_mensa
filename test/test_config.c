@@ -78,13 +78,13 @@ static void test_default_values_on_empty_file(void) {
   // service times defaults
   TEST_ASSERT_EQUAL_INT(5000, test_config.avg_service_primi);
   TEST_ASSERT_EQUAL_INT(6000, test_config.avg_service_secondi);
-  TEST_ASSERT_EQUAL_INT(2000, test_config.avg_service_coffee);
+  TEST_ASSERT_EQUAL_INT(2000, test_config.avg_service_caffe);
   TEST_ASSERT_EQUAL_INT(3000, test_config.avg_service_cassa);
 
   // workstations defaults
   TEST_ASSERT_EQUAL_INT(5, test_config.workstations_primi);
   TEST_ASSERT_EQUAL_INT(5, test_config.workstations_secondi);
-  TEST_ASSERT_EQUAL_INT(5, test_config.workstations_coffee);
+  TEST_ASSERT_EQUAL_INT(5, test_config.workstations_caffe);
   TEST_ASSERT_EQUAL_INT(1, test_config.workstations_cassa);
 
   // pauses defaults
@@ -95,13 +95,13 @@ static void test_default_values_on_empty_file(void) {
   // queue seats defaults
   TEST_ASSERT_EQUAL_INT(10, test_config.queue_capacity_primi);
   TEST_ASSERT_EQUAL_INT(10, test_config.queue_capacity_secondi);
-  TEST_ASSERT_EQUAL_INT(15, test_config.queue_capacity_coffee);
+  TEST_ASSERT_EQUAL_INT(15, test_config.queue_capacity_caffe);
   TEST_ASSERT_EQUAL_INT(15, test_config.queue_capacity_cassa);
 
   // prices defaults
   TEST_ASSERT_EQUAL_INT(5, test_config.price_primi);
   TEST_ASSERT_EQUAL_INT(8, test_config.price_secondi);
-  TEST_ASSERT_EQUAL_INT(1, test_config.price_coffee);
+  TEST_ASSERT_EQUAL_INT(1, test_config.price_caffe);
 
   // refills defaults
   TEST_ASSERT_EQUAL_INT(50000, test_config.avg_refill_primi);
@@ -112,14 +112,14 @@ static void test_default_values_on_empty_file(void) {
   // variability defaults
   TEST_ASSERT_EQUAL_INT(50, test_config.variability_primi);
   TEST_ASSERT_EQUAL_INT(50, test_config.variability_secondi);
-  TEST_ASSERT_EQUAL_INT(80, test_config.variability_coffee);
+  TEST_ASSERT_EQUAL_INT(80, test_config.variability_caffe);
   TEST_ASSERT_EQUAL_INT(10, test_config.variability_cassa);
 }
 
 static void test_partial_overrides(void) {
   // only override simulation duration and one price
   const char *file_content = "SIM_DURATION = 12345\n"
-                             "PRICE_COFFEE = 99\n";
+                             "PRICE_CAFFE = 99\n";
 
   create_temp_config_file(file_content);
 
@@ -127,7 +127,7 @@ static void test_partial_overrides(void) {
 
   // check overrides
   TEST_ASSERT_EQUAL_INT(12345, test_config.simulation_duration_days);
-  TEST_ASSERT_EQUAL_INT(99, test_config.price_coffee);
+  TEST_ASSERT_EQUAL_INT(99, test_config.price_caffe);
 
   // check that other values are still defaults
   // default
@@ -227,7 +227,7 @@ static void test_random_parameters_parsing(void) {
 
                              "PROBABILITY_USER_WANTS_PRIMO = 80\n"
                              "PROBABILITY_USER_WANTS_SECONDO = 15\n"
-                             "PROBABILITY_USER_WANTS_COFFEE = 5\n";
+                             "PROBABILITY_USER_WANTS_CAFFE = 5\n";
 
   create_temp_config_file(file_content);
 
@@ -241,7 +241,7 @@ static void test_random_parameters_parsing(void) {
 
   TEST_ASSERT_EQUAL_INT(80, test_config.probability_user_wants_primo);
   TEST_ASSERT_EQUAL_INT(15, test_config.probability_user_wants_secondo);
-  TEST_ASSERT_EQUAL_INT(5, test_config.probability_user_wants_coffee);
+  TEST_ASSERT_EQUAL_INT(5, test_config.probability_user_wants_caffe);
 }
 
 ///////////////////
@@ -257,12 +257,12 @@ static void test_parse_all_fields(void) {
 
                              "AVG_SRVC_PRIMI = 10\n"
                              "AVG_SRVC_SECONDI = 11\n"
-                             "AVG_SRVC_COFFEE = 12\n"
+                             "AVG_SRVC_CAFFE = 12\n"
                              "AVG_SRVC_CASSA = 13\n"
 
                              "WORKSTATIONS_PRIMI = 50\n"
                              "WORKSTATIONS_SECONDI = 51\n"
-                             "WORKSTATIONS_COFFEE = 52\n"
+                             "WORKSTATIONS_CAFFE = 52\n"
                              "WORKSTATIONS_CASSA = 53\n"
 
                              "MAX_PAUSES_PER_DAY = 5\n"
@@ -271,12 +271,12 @@ static void test_parse_all_fields(void) {
 
                              "NOF_WK_SEATS_PRIMI = 20\n"
                              "NOF_WK_SEATS_SECONDI = 21\n"
-                             "NOF_WK_SEATS_COFFEE = 22\n"
+                             "NOF_WK_SEATS_CAFFE = 22\n"
                              "NOF_WK_SEATS_CASSA = 23\n"
 
                              "PRICE_PRIMI = 30\n"
                              "PRICE_SECONDI = 31\n"
-                             "PRICE_COFFEE = 32\n"
+                             "PRICE_CAFFE = 32\n"
 
                              "AVG_REFILL_PRIMI = 40\n"
                              "AVG_REFILL_SECONDI = 41\n"
@@ -285,7 +285,7 @@ static void test_parse_all_fields(void) {
 
                              "VARIABILITY_PRIMI = 60\n"
                              "VARIABILITY_SECONDI = 61\n"
-                             "VARIABILITY_COFFEE = 62\n"
+                             "VARIABILITY_CAFFE = 62\n"
                              "VARIABILITY_CASSA = 63\n";
 
   create_temp_config_file(file_content);
@@ -303,13 +303,13 @@ static void test_parse_all_fields(void) {
   // service times
   TEST_ASSERT_EQUAL_INT(10, test_config.avg_service_primi);
   TEST_ASSERT_EQUAL_INT(11, test_config.avg_service_secondi);
-  TEST_ASSERT_EQUAL_INT(12, test_config.avg_service_coffee);
+  TEST_ASSERT_EQUAL_INT(12, test_config.avg_service_caffe);
   TEST_ASSERT_EQUAL_INT(13, test_config.avg_service_cassa);
 
   // workstations
   TEST_ASSERT_EQUAL_INT(50, test_config.workstations_primi);
   TEST_ASSERT_EQUAL_INT(51, test_config.workstations_secondi);
-  TEST_ASSERT_EQUAL_INT(52, test_config.workstations_coffee);
+  TEST_ASSERT_EQUAL_INT(52, test_config.workstations_caffe);
   TEST_ASSERT_EQUAL_INT(53, test_config.workstations_cassa);
 
   // pauses
@@ -320,13 +320,13 @@ static void test_parse_all_fields(void) {
   // queue seats
   TEST_ASSERT_EQUAL_INT(20, test_config.queue_capacity_primi);
   TEST_ASSERT_EQUAL_INT(21, test_config.queue_capacity_secondi);
-  TEST_ASSERT_EQUAL_INT(22, test_config.queue_capacity_coffee);
+  TEST_ASSERT_EQUAL_INT(22, test_config.queue_capacity_caffe);
   TEST_ASSERT_EQUAL_INT(23, test_config.queue_capacity_cassa);
 
   // prices
   TEST_ASSERT_EQUAL_INT(30, test_config.price_primi);
   TEST_ASSERT_EQUAL_INT(31, test_config.price_secondi);
-  TEST_ASSERT_EQUAL_INT(32, test_config.price_coffee);
+  TEST_ASSERT_EQUAL_INT(32, test_config.price_caffe);
 
   // refills
   TEST_ASSERT_EQUAL_INT(40, test_config.avg_refill_primi);
@@ -337,7 +337,7 @@ static void test_parse_all_fields(void) {
   // variability
   TEST_ASSERT_EQUAL_INT(60, test_config.variability_primi);
   TEST_ASSERT_EQUAL_INT(61, test_config.variability_secondi);
-  TEST_ASSERT_EQUAL_INT(62, test_config.variability_coffee);
+  TEST_ASSERT_EQUAL_INT(62, test_config.variability_caffe);
   TEST_ASSERT_EQUAL_INT(63, test_config.variability_cassa);
 }
 

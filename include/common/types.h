@@ -13,7 +13,7 @@
 
 #define SEM_INDEX_SEATS_PRIMI 0
 #define SEM_INDEX_SEATS_SECONDI 1
-#define SEM_INDEX_SEATS_COFFEE 2
+#define SEM_INDEX_SEATS_CAFFE 2
 #define SEM_INDEX_SEATS_CASSA 3
 // posti a sedere "NOF_TABLE_SEATS"
 #define SEM_INDEX_TABLES 4
@@ -24,7 +24,7 @@
 
 #define SEM_OPERATORS_PRIMI 7
 #define SEM_OPERATORS_SECONDI 8
-#define SEM_OPERATORS_COFFEE 9
+#define SEM_OPERATORS_CAFFE 9
 #define SEM_OPERATORS_CASSA 10
 
 #define TOTAL_SEMS 11
@@ -33,7 +33,7 @@
 
 #define MSG_TYPE_ORDER_PRIMI 1
 #define MSG_TYPE_ORDER_SECONDI 2
-#define MSG_TYPE_ORDER_COFFEE 3
+#define MSG_TYPE_ORDER_CAFFE 3
 
 typedef struct {
   // indice worker -> enum OpType
@@ -52,12 +52,12 @@ typedef struct statistics {
   // piatti distribuiti per tipo
   int plates_primi;
   int plates_secondi;
-  int plates_coffee;
+  int plates_caffe;
 
   // piatti avanzati (calcolati a fine giornata)
   int leftover_primi;
   int leftover_secondi;
-  int leftover_coffee;
+  int leftover_caffe;
 
   double total_revenue;
 
@@ -83,6 +83,6 @@ typedef struct message_response {
   pid_t operator_pid;
 } MessageResponse;
 
-typedef enum { OP_PRIMI = 0, OP_SECONDI, OP_COFFEE, OP_CASSA } OpType;
+typedef enum { OP_PRIMI = 0, OP_SECONDI, OP_CAFFE, OP_CASSA } OpType;
 
 #endif

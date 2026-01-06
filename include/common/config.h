@@ -39,13 +39,13 @@ typedef struct config {
   // capacità code (utenti in attesa)
   int queue_capacity_primi;   // NOF_WK_SEATS_PRIMI
   int queue_capacity_secondi; // NOF_WK_SEATS_SECONDI
-  int queue_capacity_coffee;  // NOF_WK_SEATS_COFFEE
+  int queue_capacity_caffe;  // NOF_WK_SEATS_CAFFE
   int queue_capacity_cassa;   // NOF_WK_SEATS_CASSA
 
   // postazioni fisiche (numero operatori contemporanei)
   int workstations_primi;   // WORKSTATIONS_PRIMI
   int workstations_secondi; // WORKSTATIONS_SECONDI
-  int workstations_coffee;  // WORKSTATIONS_COFFEE
+  int workstations_caffe;  // WORKSTATIONS_CAFFE
   int workstations_cassa;   // WORKSTATIONS_CASSA
 
   ////////////////////////////////////////////////////////////
@@ -55,19 +55,19 @@ typedef struct config {
   // tempi medi base
   int avg_service_primi;   // AVG_SRVC_PRIMI
   int avg_service_secondi; // AVG_SRVC_SECONDI
-  int avg_service_coffee;  // AVG_SRVC_COFFEE
+  int avg_service_caffe;  // AVG_SRVC_CAFFE
   int avg_service_cassa;   // AVG_SRVC_CASSA
 
   // variabilità (% +/-)
   int variability_primi;   // VARIABILITY_PRIMI
   int variability_secondi; // VARIABILITY_SECONDI
-  int variability_coffee;  // VARIABILITY_COFFEE
+  int variability_caffe;  // VARIABILITY_CAFFE
   int variability_cassa;   // VARIABILITY_CASSA
 
   // prezzi
   int price_primi;   // PRICE_PRIMI
   int price_secondi; // PRICE_SECONDI
-  int price_coffee;  // PRICE_COFFEE
+  int price_caffe;  // PRICE_CAFFE
 
   //////////////////////////////////////////
   //  5) COMPORTAMENTO OPERATORI (Pause)  //
@@ -89,7 +89,7 @@ typedef struct config {
   // preferenze (%)
   int probability_user_wants_primo;   // PROBABILITY_USER_WANTS_PRIMO
   int probability_user_wants_secondo; // PROBABILITY_USER_WANTS_SECONDO
-  int probability_user_wants_coffee;  // PROBABILITY_USER_WANTS_COFFEE
+  int probability_user_wants_caffe;  // PROBABILITY_USER_WANTS_CAFFE
 
   // budget
   int user_budget_min;       // USER_BUDGET_MIN
