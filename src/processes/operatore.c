@@ -116,11 +116,10 @@ int setup_operator_ipc(void) {
  * @return Il tempo di servizio calcolato (in nanosecondi).
  */
 long calculate_service_time(long avg_ns, int range_percent) {
-  long range = (avg_ns * range_percent) / 100;
-  long delta = (rand() % (range * 2 + 1)) - range;
-  long time = avg_ns + delta;
+  long time_with_variance =
+      (long)random_variance((double)avg_ns, (double)range_percent, rand);
 
-  return (time > 0) ? time : 0;
+  return (time_with_variance > 0) ? time_with_variance : 0;
 }
 
 /**
@@ -197,7 +196,7 @@ void attempt_pause(int sem_id, int sem_workstation_index, int *pauses_done,
   }
 
   // `pause_probability_percent` di probabilità di fare pausa
-  if ((rand() % 100) < config.pause_probability_percent) {
+  if (random_probability(config.pause_probability_percent, rand)) {
     // TOCTOU (Time Of Check to Time Of Use) => possibile Race Condition !!
     // ACCETTABILE !!
     // == il processo potrebbe essere prelevato dalla CPU tra il check e il wait

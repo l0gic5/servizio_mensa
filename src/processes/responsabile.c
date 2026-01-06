@@ -297,7 +297,7 @@ void print_daily_stats(int day, Statistics *stats) {
 
   printf("\n" COLOR_BLUE "======== REPORT GIORNO %d =========" COLOR_RESET "\n",
          day);
-  printf("Utenti Serviti Totali: %d\n", stats->total_users_served);
+  printf("Piatti Serviti in totale: %d\n", stats->total_users_served);
   printf("Utenti Respinti/Overload: %d\n", stats->total_users_refused);
   printf("Piatti Distribuiti:\n  - Primi: %d\n  - Secondi: %d\n  - Caffè: %d\n",
          stats->plates_primi, stats->plates_secondi, stats->plates_coffee);

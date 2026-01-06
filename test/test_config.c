@@ -220,6 +220,30 @@ static void test_non_numeric_values(void) {
   TEST_ASSERT_EQUAL_INT(10, test_config.nof_users);
 }
 
+static void test_random_parameters_parsing(void) {
+  const char *file_content = "USER_QUEUE_TIMEOUT_SEC = 5\n"
+                             "USER_MEAL_DURATION_NS = 123456\n"
+                             "USER_MAX_ARRIVAL_DELAY_US = 999\n"
+
+                             "PROBABILITY_USER_WANTS_PRIMO = 80\n"
+                             "PROBABILITY_USER_WANTS_SECONDO = 15\n"
+                             "PROBABILITY_USER_WANTS_COFFEE = 5\n";
+
+  create_temp_config_file(file_content);
+
+  int result = parse_config(TEMP_CONFIG_FILE, &test_config);
+
+  TEST_ASSERT_EQUAL_INT(0, result);
+
+  TEST_ASSERT_EQUAL_INT(5, test_config.user_queue_timeout_sec);
+  TEST_ASSERT_EQUAL_INT(123456, test_config.user_meal_duration_ns);
+  TEST_ASSERT_EQUAL_INT(999, test_config.user_max_arrival_delay_us);
+
+  TEST_ASSERT_EQUAL_INT(80, test_config.probability_user_wants_primo);
+  TEST_ASSERT_EQUAL_INT(15, test_config.probability_user_wants_secondo);
+  TEST_ASSERT_EQUAL_INT(5, test_config.probability_user_wants_coffee);
+}
+
 ///////////////////
 //  INTEGRATION  //
 ///////////////////
@@ -336,6 +360,7 @@ int main(void) {
   RUN_TEST(test_malformed_lines);
   RUN_TEST(test_unknown_keys_ignored);
   RUN_TEST(test_non_numeric_values);
+  RUN_TEST(test_random_parameters_parsing);
 
   // integration
   RUN_TEST(test_parse_all_fields);

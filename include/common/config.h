@@ -91,6 +91,12 @@ typedef struct config {
   int probability_user_wants_secondo; // PROBABILITY_USER_WANTS_SECONDO
   int probability_user_wants_coffee;  // PROBABILITY_USER_WANTS_COFFEE
 
+  // budget
+  int user_budget_min;       // USER_BUDGET_MIN
+  int user_budget_max;       // USER_BUDGET_MAX
+  int user_min_daily_salary; // USER_MIN_DAILY_SALARY
+  int user_max_daily_salary; // USER_MAX_DAILY_SALARY
+
   ///////////////////////////////////
   //  7) LOGISTICA (Rifornimenti)  //
   ///////////////////////////////////
@@ -114,4 +120,36 @@ typedef struct config {
  */
 int parse_config(const char *filename, Config *config);
 
+/**
+ * @brief Genera un numero casuale (logica intera castata a double)
+ * * @param min Valore minimo
+ * @param max Valore massimo
+ * @param generator Puntatore alla funzione di generazione (es. rand)
+ * @return double Risultato
+ */
+double random_range(double min, double max, int (*generator)(void));
+
+/**
+ * @brief Restituisce true con una certa probabilità percentuale.
+ *
+ * @param percent Probabilità in percentuale (0-100)
+ * @param generator Puntatore alla funzione di generazione (es. rand)
+ *
+ * @return true Se l'evento si verifica
+ * @return false Altrimenti
+ */
+bool random_probability(int percent, int (*generator)(void));
+
+/**
+ * @brief Calcola un valore casuale applicando una varianza percentuale su una
+ * base. Utile per i tempi di servizio (es. 5000ms +/- 50%).
+ * 
+ * @param base Valore base
+ * @param variance_percent Percentuale di varianza (+/-)
+ * @param generator Puntatore alla funzione di generazione (es. rand)
+ * 
+ * @return double Valore calcolato
+ */
+double random_variance(double base, double variance_percent,
+                       int (*generator)(void));
 #endif

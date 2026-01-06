@@ -35,6 +35,13 @@
    : (r) == 3 ? "CASSA"                                                        \
               : "IGNOTO")
 
+#define ROLE_NAME_SINGULAR(r)                                                  \
+  ((r) == 0   ? "PRIMO"                                                        \
+   : (r) == 1 ? "SECONDO"                                                      \
+   : (r) == 2 ? "CAFFE"                                                        \
+   : (r) == 3 ? "CASSA"                                                        \
+              : "IGNOTO")
+
 #define LOG_INFO(ctx, msg, ...)                                                \
   fprintf(stdout,                                                              \
           COLOR_GREEN "[%s]" COLOR_PURPLE "(%d) " COLOR_RESET msg "\n", ctx,   \
@@ -43,13 +50,13 @@
 #define LOG_WARN(ctx, msg, ...)                                                \
   fprintf(stdout,                                                              \
           COLOR_YELLOW "[%s]" COLOR_PURPLE "(%d) " COLOR_YELLOW                \
-                       "WARNING: " msg COLOR_RESET "\n",                      \
+                       "WARNING: " msg COLOR_RESET "\n",                       \
           ctx, getpid(), ##__VA_ARGS__)
 
 #define LOG_ERR(ctx, msg, ...)                                                 \
   fprintf(stderr,                                                              \
           COLOR_RED "[%s]" COLOR_PURPLE "(%d) " COLOR_RED                      \
-                    "ERROR: " msg COLOR_RESET "\n",                           \
+                    "ERROR: " msg COLOR_RESET "\n",                            \
           ctx, getpid(), ##__VA_ARGS__)
 
 #endif

@@ -23,6 +23,27 @@ static char *trim(char *str) {
   return str;
 }
 
+double random_range(double min, double max, int (*generator)(void)) {
+  long range = (long)(max - min + 1);
+
+  long random_val = generator();
+
+  return min + (double)(random_val % range);
+}
+
+bool random_probability(int percent, int (*generator)(void)) {
+  return (generator() % 100) < percent;
+}
+
+double random_variance(double base, double variance_percent,
+                       int (*generator)(void)) {
+  double range = (base * variance_percent) / 100.0;
+  double min = base - range;
+  double max = base + range;
+
+  return random_range(min, max, generator);
+}
+
 /**
  * @brief Applies a configuration parameter to the Config struct.
  * Mappa le chiavi "LEGACY" (dal PDF) alle variabili "NUOVE" (Autoesplicative).
@@ -154,6 +175,17 @@ static void apply_config_parameter(Config *config, const char *key,
     config->probability_user_wants_secondo = atoi(value);
   } else if (strcmp(key, "PROBABILITY_USER_WANTS_COFFEE") == 0) {
     config->probability_user_wants_coffee = atoi(value);
+  }
+
+  // budget
+  else if (strcmp(key, "USER_BUDGET_MIN") == 0) {
+    config->user_budget_min = atoi(value);
+  } else if (strcmp(key, "USER_BUDGET_MAX") == 0) {
+    config->user_budget_max = atoi(value);
+  } else if (strcmp(key, "USER_MIN_DAILY_SALARY") == 0) {
+    config->user_min_daily_salary = atoi(value);
+  } else if (strcmp(key, "USER_MAX_DAILY_SALARY") == 0) {
+    config->user_max_daily_salary = atoi(value);
   }
 
   ///////////////////////////////////
@@ -322,6 +354,20 @@ static void set_default_values(Config *config) {
   }
   if (config->probability_user_wants_coffee == 0) {
     config->probability_user_wants_coffee = 30;
+  }
+
+  // budget
+  if (config->user_budget_min == 0) {
+    config->user_budget_min = 10;
+  }
+  if (config->user_budget_max == 0) {
+    config->user_budget_max = 30;
+  }
+  if (config->user_min_daily_salary == 0) {
+    config->user_min_daily_salary = 6;
+  }
+  if (config->user_max_daily_salary == 0) {
+    config->user_max_daily_salary = 15;
   }
 
   ///////////////////////////////////
