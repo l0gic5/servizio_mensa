@@ -123,11 +123,11 @@ int setup_ipc(Statistics **out_stats) {
   }
 
   // Init Semafori Code Utenti
-  init_sem(g_sem_id, SEM_INDEX_SEATS_PRIMI, g_config.seats_primi);
-  init_sem(g_sem_id, SEM_INDEX_SEATS_SECONDI, g_config.seats_secondi);
-  init_sem(g_sem_id, SEM_INDEX_SEATS_COFFEE, g_config.seats_coffee);
-  init_sem(g_sem_id, SEM_INDEX_SEATS_CASSA, g_config.seats_cassa);
-  init_sem(g_sem_id, SEM_INDEX_TABLES, g_config.table_seats);
+  init_sem(g_sem_id, SEM_INDEX_SEATS_PRIMI, g_config.queue_capacity_primi);
+  init_sem(g_sem_id, SEM_INDEX_SEATS_SECONDI, g_config.queue_capacity_secondi);
+  init_sem(g_sem_id, SEM_INDEX_SEATS_COFFEE, g_config.queue_capacity_coffee);
+  init_sem(g_sem_id, SEM_INDEX_SEATS_CASSA, g_config.queue_capacity_cassa);
+  init_sem(g_sem_id, SEM_INDEX_TABLES, g_config.nof_table_seats);
 
   // Init Mutex
   init_sem(g_sem_id, SEM_INDEX_MUTEX_STATS, 1);
@@ -242,7 +242,7 @@ void spawn_worker_group(OpType role, int count, const char *path,
  * iniziale.
  */
 void start_all_processes(const char *config_path) {
-  g_total_children = g_config.n_workers + g_config.n_users;
+  g_total_children = g_config.nof_workers + g_config.nof_users;
   g_child_pids = malloc(sizeof(pid_t) * (size_t)g_total_children);
 
   if (!g_child_pids) {
@@ -257,12 +257,13 @@ void start_all_processes(const char *config_path) {
   int w_primi, w_secondi, w_coffee;
 
   compute_workers_distribution(
-      g_config.n_workers - w_cassa, g_config.avg_service_primi,
+      g_config.nof_workers - w_cassa, g_config.avg_service_primi,
       g_config.avg_service_secondi, g_config.avg_service_coffee, &w_primi,
       &w_secondi, &w_coffee);
 
   LOG_INFO("RESPONSABILE",
-           "Distribuzione Iniziale:\n  - Cassa: %d\n  - Primi: %d\n  - Secondi: %d\n  - Caffè: %d",
+           "Distribuzione Iniziale:\n  - Cassa: %d\n  - Primi: %d\n  - "
+           "Secondi: %d\n  - Caffè: %d",
            w_cassa, w_primi, w_secondi, w_coffee);
 
   // spawn Workers
@@ -277,11 +278,12 @@ void start_all_processes(const char *config_path) {
 
   // spawn Utenti
   char *args_utente[] = {(char *)PATH_UTENTE, (char *)config_path, NULL};
-  for (int i = 0; i < g_config.n_users; i++) {
+  for (int i = 0; i < g_config.nof_users; i++) {
     g_child_pids[pid_index++] = spawn_process(PATH_UTENTE, args_utente);
   }
 
-  sleep(2);
+  sleep((unsigned int)g_config.system_startup_delay_sec);
+
   LOG_INFO("RESPONSABILE", "Processi avviati: %d", pid_index);
 }
 
@@ -315,7 +317,7 @@ void print_daily_stats(int day, Statistics *stats) {
 void run_simulation_loop(Statistics *stats) {
   bool overload = false;
 
-  for (int day = 1; day <= g_config.sim_duration && !overload; day++) {
+  for (int day = 1; day <= g_config.simulation_duration_days && !overload; day++) {
     LOG_INFO("RESPONSABILE", COLOR_CYAN "Inizio Giorno %d" COLOR_RESET, day);
 
     // RICALCOLO DINAMICO (dal giorno 2)
@@ -329,7 +331,7 @@ void run_simulation_loop(Statistics *stats) {
       int w_cassa = 1;
       int w_p, w_s, w_c;
       compute_workers_distribution(
-          g_config.n_workers - w_cassa, g_config.avg_service_primi,
+          g_config.nof_workers - w_cassa, g_config.avg_service_primi,
           g_config.avg_service_secondi, g_config.avg_service_coffee, &w_p, &w_s,
           &w_c);
 
@@ -351,25 +353,24 @@ void run_simulation_loop(Statistics *stats) {
     }
 
     // ATTESA DURATA GIORNATA
-    int minuti = (g_config.minuti_servizio_giornaliero > 0)
-                     ? g_config.minuti_servizio_giornaliero
+    int minuti = (g_config.daily_service_minutes > 0)
+                     ? g_config.daily_service_minutes
                      : 120;
-    long total_nanos = (long)g_config.n_nano_secs * (long)minuti;
+    long total_nanos = (long)g_config.n_nanosecs_as_minute * (long)minuti;
 
     struct timespec ts;
     ts.tv_sec = total_nanos / 1000000000L;
     ts.tv_nsec = total_nanos % 1000000000L;
     nanosleep(&ts, NULL);
-    
+
     // FINE GIORNATA
     print_daily_stats(day, stats);
-    
+
     // SIGUSR1 = fine giornata
     for (int i = 0; i < g_total_children; i++) {
       if (g_child_pids[i] > 0)
         kill(g_child_pids[i], SIGUSR1);
     }
-
 
     if (stats->total_users_refused > g_config.overload_threshold) {
       LOG_ERR("RESPONSABILE", "TERMINAZIONE: Overload (%d > %d)",
@@ -392,12 +393,12 @@ int main(int argc, char *argv[]) {
     exit(EXIT_FAILURE);
   }
 
-  if (g_config.n_nano_secs <= 0) {
-    g_config.n_nano_secs = 1000000;
+  if (g_config.n_nanosecs_as_minute <= 0) {
+    g_config.n_nanosecs_as_minute = 1000000;
   }
 
   LOG_INFO("RESPONSABILE", "Configurazione `%s` caricata. Durata: %d gg",
-           config_path, g_config.sim_duration);
+           config_path, g_config.simulation_duration_days);
 
   Statistics *stats = NULL;
 
@@ -411,7 +412,7 @@ int main(int argc, char *argv[]) {
 
   run_simulation_loop(stats);
 
-  print_daily_stats(g_config.sim_duration, stats);
+  print_daily_stats(g_config.simulation_duration_days, stats);
   cleanup_resources();
 
   return 0;

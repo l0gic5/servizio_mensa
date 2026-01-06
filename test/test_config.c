@@ -47,8 +47,8 @@ static void test_parse_valid_file(void) {
   int result = parse_config(TEMP_CONFIG_FILE, &test_config);
 
   TEST_ASSERT_EQUAL_INT(0, result);
-  TEST_ASSERT_EQUAL_INT(99, test_config.sim_duration);
-  TEST_ASSERT_EQUAL_INT(50, test_config.n_users);
+  TEST_ASSERT_EQUAL_INT(99, test_config.simulation_duration_days);
+  TEST_ASSERT_EQUAL_INT(50, test_config.nof_users);
   TEST_ASSERT_EQUAL_INT(5, test_config.price_primi);
 
   TEST_ASSERT_EQUAL_INT(8, test_config.price_secondi);
@@ -67,12 +67,12 @@ static void test_default_values_on_empty_file(void) {
   TEST_ASSERT_EQUAL_INT(0, result);
 
   // simulation & users defaults
-  TEST_ASSERT_EQUAL_INT(30, test_config.sim_duration);
-  TEST_ASSERT_EQUAL_INT(100000000, test_config.n_nano_secs);
-  TEST_ASSERT_EQUAL_INT(120, test_config.minuti_servizio_giornaliero);
-  TEST_ASSERT_EQUAL_INT(40, test_config.n_users);
-  TEST_ASSERT_EQUAL_INT(6, test_config.n_workers);
-  TEST_ASSERT_EQUAL_INT(30, test_config.table_seats);
+  TEST_ASSERT_EQUAL_INT(30, test_config.simulation_duration_days);
+  TEST_ASSERT_EQUAL_INT(100000000, test_config.n_nanosecs_as_minute);
+  TEST_ASSERT_EQUAL_INT(120, test_config.daily_service_minutes);
+  TEST_ASSERT_EQUAL_INT(40, test_config.nof_users);
+  TEST_ASSERT_EQUAL_INT(6, test_config.nof_workers);
+  TEST_ASSERT_EQUAL_INT(30, test_config.nof_table_seats);
   TEST_ASSERT_EQUAL_INT(10, test_config.overload_threshold);
 
   // service times defaults
@@ -93,10 +93,10 @@ static void test_default_values_on_empty_file(void) {
   TEST_ASSERT_EQUAL_INT(10, test_config.pause_probability_percent);
 
   // queue seats defaults
-  TEST_ASSERT_EQUAL_INT(10, test_config.seats_primi);
-  TEST_ASSERT_EQUAL_INT(10, test_config.seats_secondi);
-  TEST_ASSERT_EQUAL_INT(15, test_config.seats_coffee);
-  TEST_ASSERT_EQUAL_INT(15, test_config.seats_cassa);
+  TEST_ASSERT_EQUAL_INT(10, test_config.queue_capacity_primi);
+  TEST_ASSERT_EQUAL_INT(10, test_config.queue_capacity_secondi);
+  TEST_ASSERT_EQUAL_INT(15, test_config.queue_capacity_coffee);
+  TEST_ASSERT_EQUAL_INT(15, test_config.queue_capacity_cassa);
 
   // prices defaults
   TEST_ASSERT_EQUAL_INT(5, test_config.price_primi);
@@ -126,12 +126,12 @@ static void test_partial_overrides(void) {
   parse_config(TEMP_CONFIG_FILE, &test_config);
 
   // check overrides
-  TEST_ASSERT_EQUAL_INT(12345, test_config.sim_duration);
+  TEST_ASSERT_EQUAL_INT(12345, test_config.simulation_duration_days);
   TEST_ASSERT_EQUAL_INT(99, test_config.price_coffee);
 
   // check that other values are still defaults
   // default
-  TEST_ASSERT_EQUAL_INT(6, test_config.n_workers);
+  TEST_ASSERT_EQUAL_INT(6, test_config.nof_workers);
   // default
   TEST_ASSERT_EQUAL_INT(5000, test_config.avg_service_primi);
 }
@@ -148,9 +148,9 @@ static void test_actual_default_conf_file(void) {
   int result = parse_config(ACTUAL_DEFAULT_CONF_PATH, &test_config);
   TEST_ASSERT_EQUAL_INT(0, result);
 
-  TEST_ASSERT_EQUAL_INT(30, test_config.sim_duration);
-  TEST_ASSERT_EQUAL_INT(40, test_config.n_users);
-  TEST_ASSERT_EQUAL_INT(6, test_config.n_workers);
+  TEST_ASSERT_EQUAL_INT(30, test_config.simulation_duration_days);
+  TEST_ASSERT_EQUAL_INT(40, test_config.nof_users);
+  TEST_ASSERT_EQUAL_INT(6, test_config.nof_workers);
   TEST_ASSERT_EQUAL_INT(5000, test_config.avg_service_primi);
 }
 
@@ -169,7 +169,7 @@ static void test_comments_and_empty_lines(void) {
 
   TEST_ASSERT_EQUAL_INT(0, result);
   // should default to 30
-  TEST_ASSERT_EQUAL_INT(30, test_config.sim_duration);
+  TEST_ASSERT_EQUAL_INT(30, test_config.simulation_duration_days);
 }
 
 //////////////////
@@ -189,8 +189,8 @@ static void test_malformed_lines(void) {
 
   TEST_ASSERT_EQUAL_INT(0, result);
 
-  TEST_ASSERT_EQUAL_INT(30, test_config.sim_duration);
-  TEST_ASSERT_EQUAL_INT(40, test_config.n_users);
+  TEST_ASSERT_EQUAL_INT(30, test_config.simulation_duration_days);
+  TEST_ASSERT_EQUAL_INT(40, test_config.nof_users);
 }
 
 static void test_unknown_keys_ignored(void) {
@@ -203,7 +203,7 @@ static void test_unknown_keys_ignored(void) {
   int result = parse_config(TEMP_CONFIG_FILE, &test_config);
 
   TEST_ASSERT_EQUAL_INT(0, result);
-  TEST_ASSERT_EQUAL_INT(5, test_config.sim_duration);
+  TEST_ASSERT_EQUAL_INT(5, test_config.simulation_duration_days);
 }
 
 static void test_non_numeric_values(void) {
@@ -215,9 +215,9 @@ static void test_non_numeric_values(void) {
   parse_config(TEMP_CONFIG_FILE, &test_config);
 
   // atoi("trenta") == 0 -> triggers default -> 30
-  TEST_ASSERT_EQUAL_INT(30, test_config.sim_duration);
+  TEST_ASSERT_EQUAL_INT(30, test_config.simulation_duration_days);
   // atoi("10abc") == 10 -> Valid override
-  TEST_ASSERT_EQUAL_INT(10, test_config.n_users);
+  TEST_ASSERT_EQUAL_INT(10, test_config.nof_users);
 }
 
 ///////////////////
@@ -232,7 +232,7 @@ static void test_parse_all_fields(void) {
                              "OVERLOAD_THRESHOLD = 999\n"
 
                              "AVG_SRVC_PRIMI = 10\n"
-                             "AVG_SRVC_MAIN_COURSE = 11\n"
+                             "AVG_SRVC_SECONDI = 11\n"
                              "AVG_SRVC_COFFEE = 12\n"
                              "AVG_SRVC_CASSA = 13\n"
 
@@ -270,10 +270,10 @@ static void test_parse_all_fields(void) {
   TEST_ASSERT_EQUAL_INT(0, result);
 
   // general
-  TEST_ASSERT_EQUAL_INT(1, test_config.sim_duration);
-  TEST_ASSERT_EQUAL_INT(2, test_config.n_users);
-  TEST_ASSERT_EQUAL_INT(3, test_config.n_workers);
-  TEST_ASSERT_EQUAL_INT(4, test_config.table_seats);
+  TEST_ASSERT_EQUAL_INT(1, test_config.simulation_duration_days);
+  TEST_ASSERT_EQUAL_INT(2, test_config.nof_users);
+  TEST_ASSERT_EQUAL_INT(3, test_config.nof_workers);
+  TEST_ASSERT_EQUAL_INT(4, test_config.nof_table_seats);
   TEST_ASSERT_EQUAL_INT(999, test_config.overload_threshold);
 
   // service times
@@ -294,10 +294,10 @@ static void test_parse_all_fields(void) {
   TEST_ASSERT_EQUAL_INT(7, test_config.pause_probability_percent);
 
   // queue seats
-  TEST_ASSERT_EQUAL_INT(20, test_config.seats_primi);
-  TEST_ASSERT_EQUAL_INT(21, test_config.seats_secondi);
-  TEST_ASSERT_EQUAL_INT(22, test_config.seats_coffee);
-  TEST_ASSERT_EQUAL_INT(23, test_config.seats_cassa);
+  TEST_ASSERT_EQUAL_INT(20, test_config.queue_capacity_primi);
+  TEST_ASSERT_EQUAL_INT(21, test_config.queue_capacity_secondi);
+  TEST_ASSERT_EQUAL_INT(22, test_config.queue_capacity_coffee);
+  TEST_ASSERT_EQUAL_INT(23, test_config.queue_capacity_cassa);
 
   // prices
   TEST_ASSERT_EQUAL_INT(30, test_config.price_primi);

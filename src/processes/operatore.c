@@ -327,7 +327,7 @@ int main(int argc, char *argv[]) {
   LOG_INFO("OPERATORE", "Avviato ID %d", my_id);
 
   // LOOP GIORNI
-  for (int day = 1; day <= config.sim_duration; day++) {
+  for (int day = 1; day <= config.simulation_duration_days; day++) {
 
     // lettura dinamica del ruolo dalla SHM
     // ogni giorno l'operatore controlla se il responsabile gli ha cambiato

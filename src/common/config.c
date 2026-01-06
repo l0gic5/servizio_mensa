@@ -2,9 +2,6 @@
 
 /**
  * @brief Trims leading and trailing whitespace from a string
- *
- * @param str The string to trim
- * @return char* Pointer to the trimmed string
  */
 static char *trim(char *str) {
   char *tmp;
@@ -21,60 +18,69 @@ static char *trim(char *str) {
   while (tmp > str && isspace((unsigned char)*tmp)) {
     tmp--;
   }
-
   *(tmp + 1) = 0;
 
   return str;
 }
 
 /**
- * @brief Applies a configuration parameter to the Config struct
- *
- * @param config Pointer to the Config struct
- * @param key The configuration key
- * @param value The configuration value
- * @param line_num The line number in the config file (for logging)
+ * @brief Applies a configuration parameter to the Config struct.
+ * Mappa le chiavi "LEGACY" (dal PDF) alle variabili "NUOVE" (Autoesplicative).
  */
 static void apply_config_parameter(Config *config, const char *key,
                                    const char *value, int line_num) {
-  ///////////////////////////
-  //  Simulazione e Utenti //
-  ///////////////////////////
+
+  ///////////////////////////////////////////////
+  //  1) SIMULAZIONE GLOBALE (Tempo e Limiti)  //
+  ///////////////////////////////////////////////
 
   if (strcmp(key, "SIM_DURATION") == 0) {
-    config->sim_duration = atoi(value);
+    config->simulation_duration_days = atoi(value);
   } else if (strcmp(key, "N_NANO_SECS") == 0) {
-    config->n_nano_secs = atoi(value);
-  } else if (strcmp(key, "NOF_USERS") == 0) {
-    config->n_users = atoi(value);
-  } else if (strcmp(key, "NOF_WORKERS") == 0) {
-    config->n_workers = atoi(value);
-  } else if (strcmp(key, "NOF_TABLE_SEATS") == 0) {
-    config->table_seats = atoi(value);
+    config->n_nanosecs_as_minute = atoi(value);
+  } else if (strcmp(key, "DAILY_SERVICE_MINUTES") == 0) {
+    config->daily_service_minutes = atoi(value);
+  } else if (strcmp(key, "SYSTEM_STARTUP_DELAY_SEC") == 0) {
+    config->system_startup_delay_sec = atoi(value);
   } else if (strcmp(key, "OVERLOAD_THRESHOLD") == 0) {
     config->overload_threshold = atoi(value);
-  } else if (strcmp(key, "MINUTI_SERVIZIO_GIORNALIERO") == 0) {
-    config->minuti_servizio_giornaliero = atoi(value);
+  } else if (strcmp(key, "CASSA_POSITION") == 0) {
+    if (strcmp(value, "INGRESSO") == 0)
+      config->cassa_position = INGRESSO;
+    else if (strcmp(value, "USCITA") == 0)
+      config->cassa_position = USCITA;
+    else
+      LOG_WARN("CONFIG", "Invalid CASSA_POSITION at line %d: %s", line_num,
+               value);
   }
 
-  ////////////////////////
-  //  Tempi di servizio //
-  ////////////////////////
+  ////////////////////////////////////////
+  //  2) POPOLAZIONE E RISORSE FISICHE  //
+  ////////////////////////////////////////
 
-  else if (strcmp(key, "AVG_SRVC_PRIMI") == 0) {
-    config->avg_service_primi = atoi(value);
-  } else if (strcmp(key, "AVG_SRVC_MAIN_COURSE") == 0) {
-    config->avg_service_secondi = atoi(value);
-  } else if (strcmp(key, "AVG_SRVC_COFFEE") == 0) {
-    config->avg_service_coffee = atoi(value);
-  } else if (strcmp(key, "AVG_SRVC_CASSA") == 0) {
-    config->avg_service_cassa = atoi(value);
+  else if (strcmp(key, "NOF_USERS") == 0) {
+    config->nof_users = atoi(value);
+  } else if (strcmp(key, "NOF_WORKERS") == 0) {
+    config->nof_workers = atoi(value);
+  } else if (strcmp(key, "NOF_TABLE_SEATS") == 0) {
+    config->nof_table_seats = atoi(value);
   }
 
-  ////////////////////////////////////
-  //  Postazioni Fisiche Operatori  //
-  ////////////////////////////////////
+  ///////////////////////////////////////////////////
+  //  3) CONFIGURAZIONE STAZIONI (Code e Banconi)  //
+  ///////////////////////////////////////////////////
 
+  // capacità code
+  else if (strcmp(key, "NOF_WK_SEATS_PRIMI") == 0) {
+    config->queue_capacity_primi = atoi(value);
+  } else if (strcmp(key, "NOF_WK_SEATS_SECONDI") == 0) {
+    config->queue_capacity_secondi = atoi(value);
+  } else if (strcmp(key, "NOF_WK_SEATS_COFFEE") == 0) {
+    config->queue_capacity_coffee = atoi(value);
+  } else if (strcmp(key, "NOF_WK_SEATS_CASSA") == 0) {
+    config->queue_capacity_cassa = atoi(value);
+  }
+  // postazioni fisiche
   else if (strcmp(key, "WORKSTATIONS_PRIMI") == 0) {
     config->workstations_primi = atoi(value);
   } else if (strcmp(key, "WORKSTATIONS_SECONDI") == 0) {
@@ -85,36 +91,31 @@ static void apply_config_parameter(Config *config, const char *key,
     config->workstations_cassa = atoi(value);
   }
 
-  ///////////////////////
-  //  Pause Operatori  //
-  ///////////////////////
+  ////////////////////////////////////////////////////////////
+  //  4) METRICHE DI SERVIZIO (Tempi, Variabilità, Prezzi)  //
+  ////////////////////////////////////////////////////////////
 
-  else if (strcmp(key, "MAX_PAUSES_PER_DAY") == 0) {
-    config->max_pauses_per_day = atoi(value);
-  } else if (strcmp(key, "PAUSE_DURATION_NS") == 0) {
-    config->pause_duration_ns = atoi(value);
-  } else if (strcmp(key, "PAUSE_PROBABILITY_PERCENT") == 0) {
-    config->pause_probability_percent = atoi(value);
+  // tempi medi
+  else if (strcmp(key, "AVG_SRVC_PRIMI") == 0) {
+    config->avg_service_primi = atoi(value);
+  } else if (strcmp(key, "AVG_SRVC_SECONDI") == 0) {
+    config->avg_service_secondi = atoi(value);
+  } else if (strcmp(key, "AVG_SRVC_COFFEE") == 0) {
+    config->avg_service_coffee = atoi(value);
+  } else if (strcmp(key, "AVG_SRVC_CASSA") == 0) {
+    config->avg_service_cassa = atoi(value);
   }
-
-  /////////////////////
-  //  Code Stazioni  //
-  /////////////////////
-
-  else if (strcmp(key, "NOF_WK_SEATS_PRIMI") == 0) {
-    config->seats_primi = atoi(value);
-  } else if (strcmp(key, "NOF_WK_SEATS_SECONDI") == 0) {
-    config->seats_secondi = atoi(value);
-  } else if (strcmp(key, "NOF_WK_SEATS_COFFEE") == 0) {
-    config->seats_coffee = atoi(value);
-  } else if (strcmp(key, "NOF_WK_SEATS_CASSA") == 0) {
-    config->seats_cassa = atoi(value);
+  // variabilità
+  else if (strcmp(key, "VARIABILITY_PRIMI") == 0) {
+    config->variability_primi = atoi(value);
+  } else if (strcmp(key, "VARIABILITY_SECONDI") == 0) {
+    config->variability_secondi = atoi(value);
+  } else if (strcmp(key, "VARIABILITY_COFFEE") == 0) {
+    config->variability_coffee = atoi(value);
+  } else if (strcmp(key, "VARIABILITY_CASSA") == 0) {
+    config->variability_cassa = atoi(value);
   }
-
-  //////////////
-  //  Prezzi  //
-  //////////////
-
+  // prezzi
   else if (strcmp(key, "PRICE_PRIMI") == 0) {
     config->price_primi = atoi(value);
   } else if (strcmp(key, "PRICE_SECONDI") == 0) {
@@ -123,9 +124,41 @@ static void apply_config_parameter(Config *config, const char *key,
     config->price_coffee = atoi(value);
   }
 
-  ///////////////////
-  //  Rifornimenti //
-  ///////////////////
+  //////////////////////////////////////////
+  //  5) COMPORTAMENTO OPERATORI (Pause)  //
+  //////////////////////////////////////////
+
+  else if (strcmp(key, "MAX_PAUSES_PER_DAY") == 0) {
+    config->max_pauses_per_day = atoi(value);
+  } else if (strcmp(key, "PAUSE_DURATION_NS") == 0) {
+    config->pause_duration_ns = atoi(value);
+  } else if (strcmp(key, "PAUSE_PROBABILITY_PERCENT") == 0) {
+    config->pause_probability_percent = atoi(value);
+  }
+  ////////////////////////////////////////////
+  //  6) COMPORTAMENTO E PREFERENZE UTENTI  //
+  ////////////////////////////////////////////
+
+  // comportamento
+  else if (strcmp(key, "USER_QUEUE_TIMEOUT_SEC") == 0) {
+    config->user_queue_timeout_sec = atoi(value);
+  } else if (strcmp(key, "USER_MEAL_DURATION_NS") == 0) {
+    config->user_meal_duration_ns = atoi(value);
+  } else if (strcmp(key, "USER_MAX_ARRIVAL_DELAY_US") == 0) {
+    config->user_max_arrival_delay_us = atoi(value);
+  }
+  // preferenze
+  else if (strcmp(key, "PROBABILITY_USER_WANTS_PRIMO") == 0) {
+    config->probability_user_wants_primo = atoi(value);
+  } else if (strcmp(key, "PROBABILITY_USER_WANTS_SECONDO") == 0) {
+    config->probability_user_wants_secondo = atoi(value);
+  } else if (strcmp(key, "PROBABILITY_USER_WANTS_COFFEE") == 0) {
+    config->probability_user_wants_coffee = atoi(value);
+  }
+
+  ///////////////////////////////////
+  //  7) LOGISTICA (Rifornimenti)  //
+  ///////////////////////////////////
 
   else if (strcmp(key, "AVG_REFILL_PRIMI") == 0) {
     config->avg_refill_primi = atoi(value);
@@ -135,70 +168,69 @@ static void apply_config_parameter(Config *config, const char *key,
     config->max_porzioni_primi = atoi(value);
   } else if (strcmp(key, "MAX_PORZIONI_SECONDI") == 0) {
     config->max_porzioni_secondi = atoi(value);
-  } else if (strcmp(key, "VARIABILITY_PRIMI") == 0) {
-    config->variability_primi = atoi(value);
-  } else if (strcmp(key, "VARIABILITY_SECONDI") == 0) {
-    config->variability_secondi = atoi(value);
-  } else if (strcmp(key, "VARIABILITY_COFFEE") == 0) {
-    config->variability_coffee = atoi(value);
-  } else if (strcmp(key, "VARIABILITY_CASSA") == 0) {
-    config->variability_cassa = atoi(value);
   }
 
   else {
-    LOG_WARN("CONFIG", "chiave sconosciuta alla riga %d: %s", line_num, key);
+    LOG_WARN("CONFIG", "Chiave sconosciuta riga %d: %s", line_num, key);
   }
 }
 
 /**
- * @brief Imposta i valori di default per i parametri di configurazione
- * opzionali.
- *
- * Questa funzione viene chiamata dopo il parsing del file. Se alcune
- * variabili cruciali sono rimaste a 0 (non specificate nel file), vengono
- * assegnati i valori della "CONFIGURAZIONE STANDARD".
- *
- * @param config Puntatore alla struttura Config da completare.
+ * @brief Sets default values for optional parameters.
  */
 static void set_default_values(Config *config) {
-  // Simulazione e Utenti
-  if (config->sim_duration == 0) {
-    config->sim_duration = 30;
+  ///////////////////////////////////////////////
+  //  1) SIMULAZIONE GLOBALE (Tempo e Limiti)  //
+  ///////////////////////////////////////////////
+
+  if (config->simulation_duration_days == 0) {
+    config->simulation_duration_days = 30;
   }
-  if (config->n_nano_secs == 0) {
-    config->n_nano_secs = 100000000; // 100ms
+  if (config->n_nanosecs_as_minute == 0) {
+    config->n_nanosecs_as_minute = 100000000;
   }
-  if (config->minuti_servizio_giornaliero == 0) {
-    config->minuti_servizio_giornaliero = 120; // 2 ore
+  if (config->daily_service_minutes == 0) {
+    config->daily_service_minutes = 120;
   }
-  if (config->n_users == 0) {
-    config->n_users = 40;
-  }
-  if (config->n_workers == 0) {
-    config->n_workers = 6;
-  }
-  if (config->table_seats == 0) {
-    config->table_seats = 30;
+  if (config->system_startup_delay_sec == 0) {
+    config->system_startup_delay_sec = 2;
   }
   if (config->overload_threshold == 0) {
     config->overload_threshold = 10;
   }
+  // cassa position default is INGRESSO (enum 0)
 
-  // Tempi di servizio
-  if (config->avg_service_primi == 0) {
-    config->avg_service_primi = 5000;
+  ////////////////////////////////////////
+  //  2) POPOLAZIONE E RISORSE FISICHE  //
+  ////////////////////////////////////////
+  if (config->nof_users == 0) {
+    config->nof_users = 40;
   }
-  if (config->avg_service_secondi == 0) {
-    config->avg_service_secondi = 6000;
+  if (config->nof_workers == 0) {
+    config->nof_workers = 6;
   }
-  if (config->avg_service_coffee == 0) {
-    config->avg_service_coffee = 2000;
-  }
-  if (config->avg_service_cassa == 0) {
-    config->avg_service_cassa = 3000;
+  if (config->nof_table_seats == 0) {
+    config->nof_table_seats = 30;
   }
 
-  // Postazioni Fisiche Operatori
+  ///////////////////////////////////////////////////
+  //  3) CONFIGURAZIONE STAZIONI (Code e Banconi)  //
+  ///////////////////////////////////////////////////
+
+  // capacità code
+  if (config->queue_capacity_primi == 0) {
+    config->queue_capacity_primi = 10;
+  }
+  if (config->queue_capacity_secondi == 0) {
+    config->queue_capacity_secondi = 10;
+  }
+  if (config->queue_capacity_coffee == 0) {
+    config->queue_capacity_coffee = 15;
+  }
+  if (config->queue_capacity_cassa == 0) {
+    config->queue_capacity_cassa = 15;
+  }
+  // postazioni fisiche
   if (config->workstations_primi == 0) {
     config->workstations_primi = 5;
   }
@@ -212,57 +244,24 @@ static void set_default_values(Config *config) {
     config->workstations_cassa = 1;
   }
 
-  // Pause
-  if (config->max_pauses_per_day == 0) {
-    config->max_pauses_per_day = 3;
-  }
-  if (config->pause_duration_ns == 0) {
-    config->pause_duration_ns = 500000000; // 0.5 sec
-  }
-  if (config->pause_probability_percent == 0) {
-    config->pause_probability_percent = 10; // 10%
-  }
+  ////////////////////////////////////////////////////////////
+  //  4) METRICHE DI SERVIZIO (Tempi, Variabilità, Prezzi)  //
+  ////////////////////////////////////////////////////////////
 
-  // Capacità Code (Utenti)
-  if (config->seats_primi == 0) {
-    config->seats_primi = 10;
+  // tempi medi
+  if (config->avg_service_primi == 0) {
+    config->avg_service_primi = 5000;
   }
-  if (config->seats_secondi == 0) {
-    config->seats_secondi = 10;
+  if (config->avg_service_secondi == 0) {
+    config->avg_service_secondi = 6000;
   }
-  if (config->seats_coffee == 0) {
-    config->seats_coffee = 15;
+  if (config->avg_service_coffee == 0) {
+    config->avg_service_coffee = 2000;
   }
-  if (config->seats_cassa == 0) {
-    config->seats_cassa = 15;
+  if (config->avg_service_cassa == 0) {
+    config->avg_service_cassa = 3000;
   }
-
-  // Prezzi
-  if (config->price_primi == 0) {
-    config->price_primi = 5;
-  }
-  if (config->price_secondi == 0) {
-    config->price_secondi = 8;
-  }
-  if (config->price_coffee == 0) {
-    config->price_coffee = 1;
-  }
-
-  // Rifornimenti
-  if (config->avg_refill_primi == 0) {
-    config->avg_refill_primi = 50000;
-  }
-  if (config->avg_refill_secondi == 0) {
-    config->avg_refill_secondi = 50000;
-  }
-  if (config->max_porzioni_primi == 0) {
-    config->max_porzioni_primi = 100;
-  }
-  if (config->max_porzioni_secondi == 0) {
-    config->max_porzioni_secondi = 100;
-  }
-
-  // Variability
+  // variabilità
   if (config->variability_primi == 0) {
     config->variability_primi = 50;
   }
@@ -275,6 +274,72 @@ static void set_default_values(Config *config) {
   if (config->variability_cassa == 0) {
     config->variability_cassa = 10;
   }
+  // prezzi
+  if (config->price_primi == 0) {
+    config->price_primi = 5;
+  }
+  if (config->price_secondi == 0) {
+    config->price_secondi = 8;
+  }
+  if (config->price_coffee == 0) {
+    config->price_coffee = 1;
+  }
+
+  //////////////////////////////////////////
+  //  5) COMPORTAMENTO OPERATORI (Pause)  //
+  //////////////////////////////////////////
+
+  if (config->max_pauses_per_day == 0) {
+    config->max_pauses_per_day = 3;
+  }
+  if (config->pause_duration_ns == 0) {
+    config->pause_duration_ns = 500000000;
+  }
+  if (config->pause_probability_percent == 0) {
+    config->pause_probability_percent = 10;
+  }
+
+  ////////////////////////////////////////////
+  //  6) COMPORTAMENTO E PREFERENZE UTENTI  //
+  ////////////////////////////////////////////
+
+  // comportamento
+  if (config->user_queue_timeout_sec == 0) {
+    config->user_queue_timeout_sec = 2;
+  }
+  if (config->user_meal_duration_ns == 0) {
+    config->user_meal_duration_ns = 50000000;
+  }
+  if (config->user_max_arrival_delay_us == 0) {
+    config->user_max_arrival_delay_us = 500000;
+  }
+  // preferenze
+  if (config->probability_user_wants_primo == 0) {
+    config->probability_user_wants_primo = 70;
+  }
+  if (config->probability_user_wants_secondo == 0) {
+    config->probability_user_wants_secondo = 60;
+  }
+  if (config->probability_user_wants_coffee == 0) {
+    config->probability_user_wants_coffee = 30;
+  }
+
+  ///////////////////////////////////
+  //  7) LOGISTICA (Rifornimenti)  //
+  ///////////////////////////////////
+
+  if (config->avg_refill_primi == 0) {
+    config->avg_refill_primi = 50000;
+  }
+  if (config->avg_refill_secondi == 0) {
+    config->avg_refill_secondi = 50000;
+  }
+  if (config->max_porzioni_primi == 0) {
+    config->max_porzioni_primi = 100;
+  }
+  if (config->max_porzioni_secondi == 0) {
+    config->max_porzioni_secondi = 100;
+  }
 }
 
 int parse_config(const char *filename, Config *config) {
@@ -282,8 +347,7 @@ int parse_config(const char *filename, Config *config) {
   int result = 0;
 
   if (!file) {
-    LOG_ERR("CONFIG", "impossibile aprire il file di configurazione: %s",
-            filename);
+    LOG_ERR("CONFIG", "Impossibile aprire file config: %s", filename);
     result = -1;
   } else {
     char line[MAX_LINE_LENGTH];
@@ -293,32 +357,23 @@ int parse_config(const char *filename, Config *config) {
 
     while (fgets(line, sizeof(line), file)) {
       line_num++;
-
       if ((line[0] != '#' && line[0] != '\n' && line[0] != '\0')) {
         char *separator = strchr(line, '=');
-
         if (separator) {
           *separator = '\0';
           char *key = trim(line);
           char *value = trim(separator + 1);
-
           if (strlen(key) > 0 && strlen(value) > 0) {
             apply_config_parameter(config, key, value, line_num);
           } else {
-            LOG_WARN("CONFIG", "riga %d non valida: %s=%s", line_num, key,
+            LOG_WARN("CONFIG", "Riga %d non valida: %s=%s", line_num, key,
                      value);
           }
         }
-        // else => se non c'è separatore
-        // ignoro la riga
       }
     }
-
-    // DEFAULT PER PARAMETRI NON SPECIFICATI
     set_default_values(config);
-
     fclose(file);
   }
-
   return result;
 }
