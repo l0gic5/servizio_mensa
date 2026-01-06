@@ -101,6 +101,7 @@ typedef struct config {
   //  7) LOGISTICA (Rifornimenti)  //
   ///////////////////////////////////
 
+  int refill_interval_minutes; // REFILL_INTERVAL_MINUTES
   int avg_refill_primi;     // AVG_REFILL_PRIMI
   int avg_refill_secondi;   // AVG_REFILL_SECONDI
   int max_porzioni_primi;   // MAX_PORZIONI_PRIMI

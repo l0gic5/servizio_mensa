@@ -192,7 +192,9 @@ static void apply_config_parameter(Config *config, const char *key,
   //  7) LOGISTICA (Rifornimenti)  //
   ///////////////////////////////////
 
-  else if (strcmp(key, "AVG_REFILL_PRIMI") == 0) {
+  else if (strcmp(key, "REFILL_INTERVAL_MINUTES") == 0) {
+    config->refill_interval_minutes = atoi(value);
+  } else if (strcmp(key, "AVG_REFILL_PRIMI") == 0) {
     config->avg_refill_primi = atoi(value);
   } else if (strcmp(key, "AVG_REFILL_SECONDI") == 0) {
     config->avg_refill_secondi = atoi(value);
@@ -376,6 +378,9 @@ static void set_default_values(Config *config) {
   //  7) LOGISTICA (Rifornimenti)  //
   ///////////////////////////////////
 
+  if (config->refill_interval_minutes == 0) {
+    config->refill_interval_minutes = 10;
+  }
   if (config->avg_refill_primi == 0) {
     config->avg_refill_primi = 50000;
   }

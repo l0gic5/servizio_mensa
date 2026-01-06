@@ -351,7 +351,61 @@ void print_final_stats() {
   sem_signal(g_sem_id, SEM_INDEX_MUTEX_STATS);
 }
 
+/**
+ * @brief Esegue il rifornimento periodico delle stazioni (ogni 10 min).
+ * Aggiunge porzioni fino al raggiungimento della capacità massima.
+ */
+void perform_periodic_refill() {
+  if (sem_wait(g_sem_id, SEM_INDEX_MUTEX_STATS) == -1) {
+    if (errno != EINTR) {
+      LOG_ERR("RESPONSABILE", "Errore wait mutex refill");
+    }
+    return;
+  }
 
+  // rifornimento PRIMI
+  int current_primi = g_kitchen->remaining_primi;
+  int to_add_primi = g_config.avg_refill_primi;
+  if (current_primi < g_config.max_porzioni_primi) {
+    int new_qty = current_primi + to_add_primi;
+    if (new_qty > g_config.max_porzioni_primi) {
+      new_qty = g_config.max_porzioni_primi;
+    }
+    g_kitchen->remaining_primi = new_qty;
+  }
+
+  // rifornimento SECONDI
+  int current_secondi = g_kitchen->remaining_secondi;
+  int to_add_secondi = g_config.avg_refill_secondi;
+  if (current_secondi < g_config.max_porzioni_secondi) {
+    int new_qty = current_secondi + to_add_secondi;
+    if (new_qty > g_config.max_porzioni_secondi) {
+      new_qty = g_config.max_porzioni_secondi;
+    }
+    g_kitchen->remaining_secondi = new_qty;
+  }
+
+  // rifornimento CAFFÈ => (max_porzioni_caffe - remaining_caffe) == caffè
+  // infinito!
+  int current_caffe = g_kitchen->remaining_caffe;
+  int to_add_caffe = g_config.max_porzioni_caffe - g_kitchen->remaining_caffe;
+  if (current_caffe < g_config.max_porzioni_caffe) {
+    int new_qty = current_caffe + to_add_caffe;
+    if (new_qty > g_config.max_porzioni_caffe) {
+      new_qty = g_config.max_porzioni_caffe;
+    }
+    g_kitchen->remaining_caffe = new_qty;
+  }
+
+  // rilascio MUTEX
+  sem_signal(g_sem_id, SEM_INDEX_MUTEX_STATS);
+
+  LOG_INFO("RESPONSABILE",
+           "Refill eseguito. Stato cucina:\n  - %d Primi\n  - %d Secondi\n  - "
+           "%d Caffè",
+           g_kitchen->remaining_primi, g_kitchen->remaining_secondi,
+           g_kitchen->remaining_caffe);
+}
 
 /**
  * @brief Loop principale della simulazione.
@@ -414,22 +468,46 @@ void run_simulation_loop(const char *config_path) {
     }
 
     // SIMULAZIONE TEMPO
-    int minuti = (g_config.daily_service_minutes > 0)
-                     ? g_config.daily_service_minutes
-                     : 120;
-    long total_nanos = (long)g_config.n_nanosecs_as_minute * (long)minuti;
-    struct timespec ts;
-    ts.tv_sec = total_nanos / 1000000000L;
-    ts.tv_nsec = total_nanos % 1000000000L;
+    int total_minutes = (g_config.daily_service_minutes > 0)
+                            ? g_config.daily_service_minutes
+                            : 120;
 
-    if (g_shutdown) {
-      break;
-    }
+    // numero di cicli da 10 minuti che stanno nella giornata
+    int num_cycles = total_minutes / g_config.refill_interval_minutes;
+    int remainder_minutes = total_minutes % g_config.refill_interval_minutes;
 
-    if (nanosleep(&ts, NULL) == -1 && errno == EINTR) {
+    // durata nanosecondi per 10 minuti simulati
+    long cycle_nanos =
+        (long)g_config.n_nanosecs_as_minute * g_config.refill_interval_minutes;
+    struct timespec ts_cycle = {0};
+    ts_cycle.tv_sec = cycle_nanos / 1000000000L;
+    ts_cycle.tv_nsec = cycle_nanos % 1000000000L;
+
+    for (int i = 0; i < num_cycles; i++) {
       if (g_shutdown) {
         break;
       }
+
+      if (nanosleep(&ts_cycle, NULL) == -1 && errno == EINTR) {
+        if (g_shutdown) {
+          break;
+        }
+      }
+
+      perform_periodic_refill();
+    }
+
+    // gestione minuti residui
+    if (!g_shutdown && remainder_minutes > 0) {
+      long rem_nanos = (long)g_config.n_nanosecs_as_minute * remainder_minutes;
+      struct timespec ts_rem;
+      ts_rem.tv_sec = rem_nanos / 1000000000L;
+      ts_rem.tv_nsec = rem_nanos % 1000000000L;
+
+      nanosleep(&ts_rem, NULL);
+    }
+    if (g_shutdown) {
+      break;
     }
 
     DailyReport report;
