@@ -26,7 +26,7 @@ static int g_shm_stats_id = -1;
 static int g_msg_id = -1;
 static int g_sem_id = -1;
 
-static Statistics *g_stats = NULL;
+static GlobalStats *g_stats = NULL;
 
 static volatile sig_atomic_t g_running = 1;
 
@@ -60,13 +60,16 @@ void cleanup_resources(void) {
 /**
  * @brief Inizializza IPC collegandosi alle risorse del Responsabile.
  */
-int setup_cassa_ipc(void) {
+int setup_ipc(void) {
   // statistiche SHM
-  g_shm_stats_id = allocate_shm(sizeof(Statistics), FTOK_SHM_ID);
+  g_shm_stats_id = allocate_shm(sizeof(GlobalStats), FTOK_SHM_ID);
   if (g_shm_stats_id == -1) {
     return -1;
   }
-  g_stats = (Statistics *)attach_shm(g_shm_stats_id);
+  g_stats = (GlobalStats *)attach_shm(g_shm_stats_id);
+  if (g_stats == NULL) {
+    return -1;
+  }
 
   // coda messaggi
   g_msg_id = create_msg_queue();
@@ -108,7 +111,7 @@ int main(int argc, char *argv[]) {
     exit(EXIT_FAILURE);
   }
 
-  if (setup_cassa_ipc() == -1) {
+  if (setup_ipc() == -1) {
     LOG_ERR("CASSA", "Errore connessione IPC");
     exit(EXIT_FAILURE);
   }

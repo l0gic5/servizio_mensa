@@ -24,10 +24,8 @@
 #include "common/logger.h"
 #include "common/types.h"
 
-static int g_shm_id = -1;
 static int g_sem_id = -1;
 static int g_msg_id = -1;
-static Statistics *g_stats = NULL;
 
 static volatile sig_atomic_t g_running = 1;
 
@@ -46,25 +44,11 @@ void stop_handler(int sig) {
  */
 void day_change_handler(int sig) { (void)sig; }
 
-/**
- * @brief Cleanup risorse (detach SHM)
- */
-void cleanup(void) {
-  if (g_stats) {
-    detach_shm(g_stats);
-  }
-}
 
 /**
  * @brief Inizializza IPC collegandosi alle risorse esistenti
  */
-int setup_user_ipc(void) {
-  g_shm_id = allocate_shm(sizeof(Statistics), FTOK_SHM_ID);
-  if (g_shm_id == -1) {
-    return -1;
-  }
-  g_stats = (Statistics *)attach_shm(g_shm_id);
-
+int setup_ipc(void) {
   g_sem_id = create_sem_set(TOTAL_SEMS);
   g_msg_id = create_msg_queue();
 
@@ -163,6 +147,12 @@ int perform_order(OpType type, int msg_type, double amount) {
     return -1;
   }
 
+  if (resp.status == ORDER_SOLD_OUT) {
+    LOG_WARN("UTENTE", "Operatore PID %d dice: Piatto Terminato!",
+             resp.operator_pid);
+    return -2;
+  }
+
   if (type != OP_CASSA) {
     LOG_INFO("UTENTE", "Ricevuto un %s da Operatore %d.",
              ROLE_NAME_SINGULAR(type), resp.operator_pid);
@@ -250,40 +240,78 @@ void user_routine(Config *cfg, double *current_budget) {
   if (wants_primo) {
     if (enter_queue(SEM_INDEX_SEATS_PRIMI, "PRIMI",
                     cfg->user_queue_timeout_sec) == 0) {
-      if (perform_order(OP_PRIMI, MSG_TYPE_ORDER_PRIMI, 0.0) == -1) {
+
+      int outcome = perform_order(OP_PRIMI, MSG_TYPE_ORDER_PRIMI, 0.0);
+
+      if (outcome == -1) {
         return;
+      } else if (outcome == -2) {
+        // caso piatti finiti: rimborso budget e non mangio
+        *current_budget += cfg->price_primi;
+        conto_da_pagare -= cfg->price_primi;
+        LOG_INFO("UTENTE", "Niente primo oggi (esaurito). Risparmiati %.2f€",
+                 (double)cfg->price_primi);
       }
+
       sem_signal(g_sem_id, SEM_INDEX_SEATS_PRIMI);
     } else {
-      return;
+      *current_budget += cfg->price_primi;
+      conto_da_pagare -= cfg->price_primi;
     }
   }
 
   if (wants_secondo) {
     if (enter_queue(SEM_INDEX_SEATS_SECONDI, "SECONDI",
                     cfg->user_queue_timeout_sec) == 0) {
-      if (perform_order(OP_SECONDI, MSG_TYPE_ORDER_SECONDI, 0.0) == -1) {
+      int outcome = perform_order(OP_SECONDI, MSG_TYPE_ORDER_SECONDI, 0.0);
+
+      if (outcome == -1) {
         return;
+      } else if (outcome == -2) {
+        // caso piatti finiti: rimborso budget e non mangio
+        *current_budget += cfg->price_secondi;
+        conto_da_pagare -= cfg->price_secondi;
+        LOG_INFO("UTENTE", "Niente secondo oggi (esaurito). Risparmiati %.2f€",
+                 (double)cfg->price_secondi);
       }
+
       sem_signal(g_sem_id, SEM_INDEX_SEATS_SECONDI);
     } else {
-      return;
+      *current_budget += cfg->price_secondi;
+      conto_da_pagare -= cfg->price_secondi;
     }
   }
 
-  if (wants_primo || wants_secondo)
+  if (wants_primo || wants_secondo) {
     consume_meal(cfg);
+  }
 
   if (wants_caffe) {
     if (enter_queue(SEM_INDEX_SEATS_CAFFE, "CAFFE",
                     cfg->user_queue_timeout_sec) == 0) {
-      if (perform_order(OP_CAFFE, MSG_TYPE_ORDER_CAFFE, 0.0) == -1) {
+      int outcome = perform_order(OP_CAFFE, MSG_TYPE_ORDER_CAFFE, 0.0);
+
+      if (outcome == -1) {
         return;
+      } else if (outcome == -2) {
+        // caso piatti finiti: rimborso budget e non mangio
+        *current_budget += cfg->price_caffe;
+        conto_da_pagare -= cfg->price_caffe;
+        LOG_INFO("UTENTE", "Niente caffè oggi (esaurito). Risparmiati %.2f€",
+                 (double)cfg->price_caffe);
       }
+
       sem_signal(g_sem_id, SEM_INDEX_SEATS_CAFFE);
     } else {
-      return;
+      *current_budget += cfg->price_caffe;
+      conto_da_pagare -= cfg->price_caffe;
     }
+  }
+
+  // una consumazione è obligatoria, ma se il conto è 0 (tutto esaurito) esco
+  if (conto_da_pagare <= 0.001) {
+    LOG_INFO("UTENTE", "Non ho consumato nulla. Esco dalla mensa.");
+    return;
   }
 
   if (enter_queue(SEM_INDEX_SEATS_CASSA, "CASSA",
@@ -310,7 +338,7 @@ int main(int argc, char *argv[]) {
     exit(EXIT_FAILURE);
   }
 
-  if (setup_user_ipc() == -1) {
+  if (setup_ipc() == -1) {
     exit(EXIT_FAILURE);
   }
 
@@ -354,6 +382,5 @@ int main(int argc, char *argv[]) {
     // pause() si sblocca e il ciclo ricomincia.
   }
 
-  cleanup();
   return 0;
 }

@@ -28,10 +28,12 @@
 
 static int g_shm_stats_id = -1;
 static int g_shm_roles_id = -1;
+static int g_shm_supply_id = -1;
 static int g_msg_id = -1;
 static int g_sem_id = -1;
 
-static Statistics *g_stats = NULL;
+static GlobalStats *g_stats = NULL;
+static KitchenState *g_kitchen = NULL;
 static WorkerConfig *g_worker_config = NULL;
 
 /// Flag volatile per indicare la fine della giornata lavorativa (impostato da
@@ -49,6 +51,9 @@ void cleanup(int sig) {
   (void)sig;
   if (g_stats) {
     detach_shm(g_stats);
+  }
+  if (g_kitchen) {
+    detach_shm(g_kitchen);
   }
   if (g_worker_config) {
     detach_shm(g_worker_config);
@@ -79,19 +84,23 @@ void handle_day_end(int sig) {
  *
  * @return 0 in caso di successo, -1 in caso di errore.
  */
-int setup_operator_ipc(void) {
-  // statistiche SHM
-  g_shm_stats_id = allocate_shm(sizeof(Statistics), FTOK_SHM_ID);
-  if (g_shm_stats_id == -1) {
+int setup_ipc(void) {
+  // 1) SHM statistiche
+  g_shm_stats_id = allocate_shm(sizeof(GlobalStats), FTOK_SHM_ID);
+  if (g_shm_stats_id == -1)
     return -1;
-  }
-  g_stats = (Statistics *)attach_shm(g_shm_stats_id);
+  g_stats = (GlobalStats *)attach_shm(g_shm_stats_id);
 
-  // ruoli SHM
-  g_shm_roles_id = allocate_shm(sizeof(WorkerConfig), FTOK_SHM_ROLES_ID);
-  if (g_shm_roles_id == -1) {
+  g_shm_supply_id = allocate_shm(sizeof(KitchenState), FTOK_SHM_SUPPLY_ID);
+  if (g_shm_supply_id == -1)
     return -1;
-  }
+  g_kitchen = (KitchenState *)attach_shm(
+      g_shm_supply_id); // Nota: g_kitchen, non g_supply
+
+  // 2) SHM ruoli operatori
+  g_shm_roles_id = allocate_shm(sizeof(WorkerConfig), FTOK_SHM_ROLES_ID);
+  if (g_shm_roles_id == -1)
+    return -1;
   g_worker_config = (WorkerConfig *)attach_shm(g_shm_roles_id);
 
   // coda messaggi & semafori
@@ -255,39 +264,62 @@ void service_cycle(int msg_id, int sem_id, int sem_index, long avg_time,
     int res = receive_message(msg_id, &req, REQ_PAYLOAD_SIZE, msg_type, 0);
 
     if (res != -1) {
-
       // simulazione servizio
-      long srv_time = calculate_service_time(avg_time, range_p);
-      struct timespec t = {0, srv_time};
-      nanosleep(&t, NULL);
+      OrderStatus order_status = ORDER_SOLD_OUT;
 
-      // risposta al cliente
-      MessageResponse resp;
-      resp.mtype = req.sender_pid;
-      resp.operator_pid = getpid();
-      send_message(msg_id, &resp, sizeof(pid_t), 0);
-
-      // aggiornamento statistiche (sezione critica)
+      // aggiornamento statistiche
       sem_wait(sem_id, SEM_INDEX_MUTEX_STATS);
       g_stats->total_users_served++;
+
       switch (role) {
       case OP_PRIMI:
-        g_stats->plates_primi++;
+        if (g_kitchen->remaining_primi > 0) {
+          g_kitchen->remaining_primi--;
+          g_stats->total_plates_primi++;
+          order_status = ORDER_SUCCESS;
+        }
         break;
       case OP_SECONDI:
-        g_stats->plates_secondi++;
+        if (g_kitchen->remaining_secondi > 0) {
+          g_kitchen->remaining_secondi--;
+          g_stats->total_plates_secondi++;
+          order_status = ORDER_SUCCESS;
+        }
         break;
       case OP_CAFFE:
-        g_stats->plates_caffe++;
+        if (g_kitchen->remaining_caffe > 0) {
+          g_kitchen->remaining_caffe--;
+          g_stats->total_plates_caffe++;
+          order_status = ORDER_SUCCESS;
+        }
+        break;
+      case OP_CASSA:
+        g_stats->total_revenue += req.total_cost;
+        order_status = ORDER_SUCCESS;
         break;
       default:
         break;
       }
+
+      if (order_status == ORDER_SUCCESS && role != OP_CASSA) {
+        g_stats->total_users_served++;
+      }
+
       sem_signal(sem_id, SEM_INDEX_MUTEX_STATS);
+
+      long srv_time = calculate_service_time(avg_time, range_p);
+      struct timespec t = {0, srv_time};
+      nanosleep(&t, NULL);
+
+      MessageResponse resp;
+      resp.mtype = req.sender_pid;
+      resp.operator_pid = getpid();
+      resp.status = order_status;
+
+      send_message(msg_id, &resp, RES_PAYLOAD_SIZE, 0);
 
       // tentativo pausa
       attempt_pause(sem_id, sem_index, &pauses_done, role, config);
-
     }
     // se ricezione fallita => check se è per segnale di fine giornata
     else if (errno == EINTR && g_day_ended) {
@@ -316,7 +348,7 @@ int main(int argc, char *argv[]) {
     exit(EXIT_FAILURE);
   }
 
-  if (setup_operator_ipc() == -1) {
+  if (setup_ipc() == -1) {
     LOG_ERR("OPERATORE", "Errore IPC");
     exit(EXIT_FAILURE);
   }

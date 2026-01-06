@@ -39,13 +39,13 @@ typedef struct config {
   // capacità code (utenti in attesa)
   int queue_capacity_primi;   // NOF_WK_SEATS_PRIMI
   int queue_capacity_secondi; // NOF_WK_SEATS_SECONDI
-  int queue_capacity_caffe;  // NOF_WK_SEATS_CAFFE
+  int queue_capacity_caffe;   // NOF_WK_SEATS_CAFFE
   int queue_capacity_cassa;   // NOF_WK_SEATS_CASSA
 
   // postazioni fisiche (numero operatori contemporanei)
   int workstations_primi;   // WORKSTATIONS_PRIMI
   int workstations_secondi; // WORKSTATIONS_SECONDI
-  int workstations_caffe;  // WORKSTATIONS_CAFFE
+  int workstations_caffe;   // WORKSTATIONS_CAFFE
   int workstations_cassa;   // WORKSTATIONS_CASSA
 
   ////////////////////////////////////////////////////////////
@@ -55,19 +55,19 @@ typedef struct config {
   // tempi medi base
   int avg_service_primi;   // AVG_SRVC_PRIMI
   int avg_service_secondi; // AVG_SRVC_SECONDI
-  int avg_service_caffe;  // AVG_SRVC_CAFFE
+  int avg_service_caffe;   // AVG_SRVC_CAFFE
   int avg_service_cassa;   // AVG_SRVC_CASSA
 
   // variabilità (% +/-)
   int variability_primi;   // VARIABILITY_PRIMI
   int variability_secondi; // VARIABILITY_SECONDI
-  int variability_caffe;  // VARIABILITY_CAFFE
+  int variability_caffe;   // VARIABILITY_CAFFE
   int variability_cassa;   // VARIABILITY_CASSA
 
   // prezzi
   int price_primi;   // PRICE_PRIMI
   int price_secondi; // PRICE_SECONDI
-  int price_caffe;  // PRICE_CAFFE
+  int price_caffe;   // PRICE_CAFFE
 
   //////////////////////////////////////////
   //  5) COMPORTAMENTO OPERATORI (Pause)  //
@@ -89,7 +89,7 @@ typedef struct config {
   // preferenze (%)
   int probability_user_wants_primo;   // PROBABILITY_USER_WANTS_PRIMO
   int probability_user_wants_secondo; // PROBABILITY_USER_WANTS_SECONDO
-  int probability_user_wants_caffe;  // PROBABILITY_USER_WANTS_CAFFE
+  int probability_user_wants_caffe;   // PROBABILITY_USER_WANTS_CAFFE
 
   // budget
   int user_budget_min;       // USER_BUDGET_MIN
@@ -105,6 +105,7 @@ typedef struct config {
   int avg_refill_secondi;   // AVG_REFILL_SECONDI
   int max_porzioni_primi;   // MAX_PORZIONI_PRIMI
   int max_porzioni_secondi; // MAX_PORZIONI_SECONDI
+  int max_porzioni_caffe;   // MAX_PORZIONI_CAFFE
 
 } Config;
 
@@ -143,11 +144,11 @@ bool random_probability(int percent, int (*generator)(void));
 /**
  * @brief Calcola un valore casuale applicando una varianza percentuale su una
  * base. Utile per i tempi di servizio (es. 5000ms +/- 50%).
- * 
+ *
  * @param base Valore base
  * @param variance_percent Percentuale di varianza (+/-)
  * @param generator Puntatore alla funzione di generazione (es. rand)
- * 
+ *
  * @return double Valore calcolato
  */
 double random_variance(double base, double variance_percent,

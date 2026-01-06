@@ -200,6 +200,8 @@ static void apply_config_parameter(Config *config, const char *key,
     config->max_porzioni_primi = atoi(value);
   } else if (strcmp(key, "MAX_PORZIONI_SECONDI") == 0) {
     config->max_porzioni_secondi = atoi(value);
+  } else if (strcmp(key, "MAX_PORZIONI_CAFFE") == 0) {
+    config->max_porzioni_caffe = atoi(value);
   }
 
   else {
@@ -385,6 +387,9 @@ static void set_default_values(Config *config) {
   }
   if (config->max_porzioni_secondi == 0) {
     config->max_porzioni_secondi = 100;
+  }
+  if (config->max_porzioni_caffe == 0) {
+    config->max_porzioni_caffe = 10000;
   }
 }
 

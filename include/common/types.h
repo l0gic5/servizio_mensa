@@ -40,23 +40,42 @@ typedef struct {
 //  STATISTICHE  //
 ///////////////////
 
-typedef struct statistics {
+typedef struct kitchen_state {
+  int remaining_primi;
+  int remaining_secondi;
+  int remaining_caffe;
+} KitchenState;
+
+typedef struct {
   int total_users_served;
   int total_users_refused;
 
   // piatti distribuiti
-  int plates_primi;
-  int plates_secondi;
-  int plates_caffe;
+  int total_plates_primi;
+  int total_plates_secondi;
+  int total_plates_caffe;
+
+  double total_revenue;
+} GlobalStats;
+
+typedef struct {
+  int day_number;
+
+  // delta (oggi - ieri)
+  int daily_users_served;
+  int daily_users_refused;
+
+  int daily_plates_primi;
+  int daily_plates_secondi;
+  int daily_plates_caffe;
+
+  double daily_revenue;
 
   // avanzi
   int leftover_primi;
   int leftover_secondi;
   int leftover_caffe;
-
-  double total_revenue;
-  long total_waiting_time;
-} Statistics;
+} DailyReport;
 
 /////////////////////////////////
 //  MESSAGGIO (msgsnd/msgrcv)  //
@@ -75,9 +94,16 @@ typedef struct message_request {
 
 #define REQ_PAYLOAD_SIZE (sizeof(MessageRequest) - sizeof(long))
 
+typedef enum {
+  ORDER_SUCCESS = 0, // ordine eseguito
+  ORDER_SOLD_OUT = 1 // cibo finito
+} OrderStatus;
+
 typedef struct message_response {
   long mtype;
   pid_t operator_pid;
+
+  OrderStatus status;
 } MessageResponse;
 
 #define RES_PAYLOAD_SIZE (sizeof(MessageResponse) - sizeof(long))
