@@ -65,16 +65,7 @@ static void apply_config_parameter(Config *config, const char *key,
     config->system_startup_delay_sec = atoi(value);
   } else if (strcmp(key, "OVERLOAD_THRESHOLD") == 0) {
     config->overload_threshold = atoi(value);
-  } else if (strcmp(key, "CASSA_POSITION") == 0) {
-    if (strcmp(value, "INGRESSO") == 0)
-      config->cassa_position = INGRESSO;
-    else if (strcmp(value, "USCITA") == 0)
-      config->cassa_position = USCITA;
-    else
-      LOG_WARN("CONFIG", "Invalid CASSA_POSITION at line %d: %s", line_num,
-               value);
   }
-
   ////////////////////////////////////////
   //  2) POPOLAZIONE E RISORSE FISICHE  //
   ////////////////////////////////////////
@@ -168,6 +159,8 @@ static void apply_config_parameter(Config *config, const char *key,
     config->user_queue_timeout_sec = atoi(value);
   } else if (strcmp(key, "USER_MEAL_DURATION_NS") == 0) {
     config->user_meal_duration_ns = atoi(value);
+  } else if (strcmp(key, "USER_COFFEE_DURATION_NS") == 0) {
+    config->user_coffee_duration_ns = atoi(value);
   } else if (strcmp(key, "USER_MAX_ARRIVAL_DELAY_US") == 0) {
     config->user_max_arrival_delay_us = atoi(value);
   }
@@ -245,7 +238,6 @@ static void set_default_values(Config *config) {
   if (config->overload_threshold == 0) {
     config->overload_threshold = 50;
   }
-  // cassa position default is INGRESSO (enum 0)
 
   ////////////////////////////////////////
   //  2) POPOLAZIONE E RISORSE FISICHE  //
@@ -359,6 +351,9 @@ static void set_default_values(Config *config) {
   }
   if (config->user_meal_duration_ns == 0) {
     config->user_meal_duration_ns = 2000000000;
+  }
+  if (config->user_coffee_duration_ns == 0) {
+    config->user_coffee_duration_ns = 500000000;
   }
   if (config->user_max_arrival_delay_us == 0) {
     config->user_max_arrival_delay_us = 5000000;

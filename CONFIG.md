@@ -18,7 +18,6 @@ Parametri che gestiscono lo scorrere del tempo, la durata della simulazione e le
 | **`DAILY_SERVICE_MINUTES`** | `daily_service_minutes` | Durata in minuti virtuali di un giorno lavorativo. | `120` (2 ore) |
 | **`SYSTEM_STARTUP_DELAY_SEC`** | `system_startup_delay_sec` | Secondi reali di attesa all'avvio per lo spawn dei processi. | `2` |
 | **`OVERLOAD_THRESHOLD`** | `overload_threshold` | Max utenti respinti/in coda a fine giorno prima di terminare per overload. | `10` |
-| **`CASSA_POSITION`** | `cassa_position` | Posizione cassa: `INGRESSO` (paga subito) o `USCITA` (paga alla fine). | `INGRESSO` |
 
 ---
 

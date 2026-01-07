@@ -269,20 +269,68 @@ void consume_meal(Config *cfg) {
 }
 
 /**
+ * @brief Simula il consumo del pasto principale (Primi/Secondi).
+ * Richiede un posto a sedere (Tavolo).
+ *
+ * @param cfg Configurazione globale.
+ * @param has_food Indica se l'utente ha effettivamente del cibo da consumare.
+ * In caso contrario, salta il consumo.
+ */
+void consume_main_meal(Config *cfg, bool has_food) {
+  if (!g_running || !has_food) {
+    return;
+  }
+
+  LOG_INFO("UTENTE", "Cerco tavolo per mangiare...");
+  if (sem_wait(g_sem_id, SEM_INDEX_TABLES) == -1) {
+    return;
+  }
+
+  LOG_INFO("UTENTE", "Mangio al tavolo...");
+  struct timespec t = {0, cfg->user_meal_duration_ns};
+  nanosleep(&t, NULL);
+
+  sem_signal(g_sem_id, SEM_INDEX_TABLES);
+  LOG_INFO("UTENTE", "Pasto finito, libero tavolo.");
+}
+
+/**
+ * @brief Simula il consumo del caffè al bancone.
+ * Non richiede tavolo, tempo molto breve.
+ */
+void consume_coffee_bar(Config *cfg) {
+  if (!g_running) {
+    return;
+  }
+
+  LOG_INFO("UTENTE", "Bevo caffè al bancone...");
+  struct timespec t = {0, cfg->user_coffee_duration_ns};
+  nanosleep(&t, NULL);
+  LOG_INFO("UTENTE", "Caffè finito.");
+}
+
+/**
  * @brief Loop giornaliero dell'utente.
- * * Ogni giorno l'utente "torna" in mensa.
+ * RISTRUTTURATO SECONDO NUOVA LOGICA:
+ * 1. Prendi Primi/Secondi
+ * 2. Paga (Cibo + Caffè prenotato)
+ * 3. Mangia Cibo (Tavolo)
+ * 4. Prendi Caffè (Se pagato) -> Bevi (Bancone)
  */
 void user_routine(Config *cfg, double *current_budget) {
   double conto_da_pagare = 0.0;
   double budget_disponibile = *current_budget;
 
-  LOG_INFO("UTENTE", "Patrimonio attuale: %.2f€", budget_disponibile);
-
   bool wants_primo = false;
   bool wants_secondo = false;
   bool wants_caffe = false;
 
-  // prima il secondo
+  bool got_primo = false;
+  bool got_secondo = false;
+
+  // 1) SCELTA MENU
+
+  // secondo
   if (random_probability(cfg->probability_user_wants_secondo, rand)) {
     if (budget_disponibile >= cfg->price_secondi) {
       wants_secondo = true;
@@ -291,7 +339,7 @@ void user_routine(Config *cfg, double *current_budget) {
     }
   }
 
-  // poi il primo (per preferenza)
+  // primo
   if (random_probability(cfg->probability_user_wants_primo, rand)) {
     if (budget_disponibile >= cfg->price_primi) {
       wants_primo = true;
@@ -300,6 +348,7 @@ void user_routine(Config *cfg, double *current_budget) {
     }
   }
 
+  // caffè (prenotazione)
   if (random_probability(cfg->probability_user_wants_caffe, rand)) {
     if (budget_disponibile >= cfg->price_caffe) {
       wants_caffe = true;
@@ -308,7 +357,7 @@ void user_routine(Config *cfg, double *current_budget) {
     }
   }
 
-  // fallback caffè
+  // fallback se non ha scelto nulla ma ha budget per caffè
   if (!wants_primo && !wants_secondo && !wants_caffe &&
       budget_disponibile >= cfg->price_caffe) {
     wants_caffe = true;
@@ -317,11 +366,12 @@ void user_routine(Config *cfg, double *current_budget) {
   }
 
   if (conto_da_pagare <= 0.001) {
-    LOG_WARN("UTENTE", "Troppo povero oggi (%.2f€)! Salto il pasto.",
+    LOG_WARN("UTENTE", "Oggi troppo povero (ho solo %.2f€). Salto il pasto.",
              *current_budget);
     return;
   }
 
+  // 2) PRELIEVO CIBO (primi / secondi)
   // primi
   if (wants_primo && g_running) {
     double start = get_current_time_sec();
@@ -330,26 +380,24 @@ void user_routine(Config *cfg, double *current_budget) {
       int res = perform_order(OP_PRIMI, MSG_TYPE_ORDER_PRIMI, 0.0);
 
       if (res == 0) {
+        got_primo = true;
         update_wait_stats(OP_PRIMI, get_current_time_sec() - start);
       } else if (res == -2) {
-        // rimborso
+        // storno budget
         *current_budget += cfg->price_primi;
         conto_da_pagare -= cfg->price_primi;
-        wants_primo = false;
 
         if (!wants_secondo && *current_budget >= cfg->price_secondi) {
-          LOG_INFO("UTENTE", "Primo finito. Ripiego sul SECONDO.");
+          LOG_INFO("UTENTE", "Primo finito. Ripiego su SECONDO.");
           wants_secondo = true;
           *current_budget -= cfg->price_secondi;
           conto_da_pagare += cfg->price_secondi;
-        } else {
-          LOG_INFO("UTENTE",
-                   "Primo finito. Nessuna alternativa o budget insufficiente.");
         }
       }
       sem_signal(g_sem_id, SEM_INDEX_SEATS_PRIMI);
     } else {
-      return;
+      *current_budget += cfg->price_primi;
+      conto_da_pagare -= cfg->price_primi;
     }
   }
 
@@ -361,15 +409,15 @@ void user_routine(Config *cfg, double *current_budget) {
       int res = perform_order(OP_SECONDI, MSG_TYPE_ORDER_SECONDI, 0.0);
 
       if (res == 0) {
+        got_secondo = true;
         update_wait_stats(OP_SECONDI, get_current_time_sec() - start);
       } else if (res == -2) {
         *current_budget += cfg->price_secondi;
         conto_da_pagare -= cfg->price_secondi;
-        wants_secondo = false;
 
-        if (!wants_primo && !wants_caffe &&
-            *current_budget >= cfg->price_caffe) {
-          LOG_INFO("UTENTE", "Secondo finito. Ripiego sul CAFFE.");
+        // fallback caffè
+        if (!wants_caffe && *current_budget >= cfg->price_caffe) {
+          LOG_INFO("UTENTE", "Secondo finito. Ripiego su CAFFE.");
           wants_caffe = true;
           *current_budget -= cfg->price_caffe;
           conto_da_pagare += cfg->price_caffe;
@@ -377,54 +425,69 @@ void user_routine(Config *cfg, double *current_budget) {
       }
       sem_signal(g_sem_id, SEM_INDEX_SEATS_SECONDI);
     } else {
-      return;
+      *current_budget += cfg->price_secondi;
+      conto_da_pagare -= cfg->price_secondi;
     }
   }
 
-  if ((wants_primo || wants_secondo) && g_running) {
-    consume_meal(cfg);
+  if (!got_primo && !got_secondo && !wants_caffe) {
+    LOG_INFO("UTENTE", "Oggi non mangio niente. Esco.");
+    return;
   }
 
-  // caffe
+  // 3) PAGAMENTO ALLA CASSA
+
+  bool paid = false;
+  if (g_running && conto_da_pagare > 0.001) {
+    double start = get_current_time_sec();
+    if (enter_queue(SEM_INDEX_SEATS_CASSA, "CASSA",
+                    cfg->user_queue_timeout_sec) == 0) {
+      if (perform_order(OP_CASSA, MSG_TYPE_PAYMENT, conto_da_pagare) != -1) {
+        // Addebito effettivo
+        *current_budget -= conto_da_pagare;
+
+        update_wait_stats(OP_CASSA, get_current_time_sec() - start);
+
+        LOG_INFO("UTENTE", "Pagato %.2f€", conto_da_pagare);
+        paid = true;
+      }
+      sem_signal(g_sem_id, SEM_INDEX_SEATS_CASSA);
+    }
+  }
+
+  // sciopero cassa o timeout
+  if (!paid && conto_da_pagare > 0.001) {
+    LOG_WARN("UTENTE", "Impossibile pagare. Abbandono il vassoio ed esco.");
+    return;
+  }
+
+  // 4) CONSUMO PASTO (Tavolo)
+
+  if ((got_primo || got_secondo) && g_running) {
+    consume_main_meal(cfg, true);
+  }
+
+  // 5) CAFFÈ
+
   if (wants_caffe && g_running) {
     double start = get_current_time_sec();
+
     if (enter_queue(SEM_INDEX_SEATS_CAFFE, "CAFFE",
                     cfg->user_queue_timeout_sec) == 0) {
       int res = perform_order(OP_CAFFE, MSG_TYPE_ORDER_CAFFE, 0.0);
 
       if (res == 0) {
         update_wait_stats(OP_CAFFE, get_current_time_sec() - start);
+
+        consume_coffee_bar(cfg);
       } else if (res == -2) {
-        *current_budget += cfg->price_caffe;
-        conto_da_pagare -= cfg->price_caffe;
+        // TEORICAMENTE non dovrebbe succedere => caffè infinito (soglia molto
+        // alta)
+        LOG_WARN("UTENTE", "Caffè finito! Ho pagato per nulla :(");
       }
       sem_signal(g_sem_id, SEM_INDEX_SEATS_CAFFE);
     } else {
-      return;
-    }
-  }
-
-  // una consumazione è obligatoria, ma se il conto è 0 (tutto esaurito) esco
-  if (conto_da_pagare <= 0.001) {
-    LOG_INFO("UTENTE", "Non ho consumato nulla. Esco dalla mensa.");
-    return;
-  }
-
-  if (g_running) {
-    double start = get_current_time_sec();
-    if (enter_queue(SEM_INDEX_SEATS_CASSA, "CASSA",
-                    cfg->user_queue_timeout_sec) == 0) {
-      if (perform_order(OP_CASSA, MSG_TYPE_PAYMENT, conto_da_pagare) != -1) {
-        *current_budget -= conto_da_pagare;
-
-        double end = get_current_time_sec();
-        update_wait_stats(OP_CASSA, end - start);
-
-        LOG_INFO("UTENTE",
-                 "Pagamento di %.2f€ completato. Saldo residuo: %.2f€",
-                 conto_da_pagare, *current_budget);
-      }
-      sem_signal(g_sem_id, SEM_INDEX_SEATS_CASSA);
+      LOG_WARN("UTENTE", "Coda caffè impossibile. Rinuncio al caffè pagato.");
     }
   }
 }
@@ -480,7 +543,7 @@ int main(int argc, char *argv[]) {
                                        config.user_max_daily_salary, rand);
     my_budget += daily_salary;
 
-    if(my_budget > config.user_budget_max) {
+    if (my_budget > config.user_budget_max) {
       my_budget = config.user_budget_max;
     }
 

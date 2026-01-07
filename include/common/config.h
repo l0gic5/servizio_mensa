@@ -10,8 +10,6 @@
 
 #define MAX_LINE_LENGTH 512
 
-typedef enum cassa_position { INGRESSO, USCITA } CassaPosition;
-
 typedef struct config {
   ///////////////////////////////////////////////
   //  1) SIMULAZIONE GLOBALE (Tempo e Limiti)  //
@@ -22,7 +20,6 @@ typedef struct config {
   int daily_service_minutes;    // DAILY_SERVICE_MINUTES
   int system_startup_delay_sec; // SYSTEM_STARTUP_DELAY_SEC
   int overload_threshold;       // OVERLOAD_THRESHOLD
-  CassaPosition cassa_position; // CASSA_POSITION
 
   ////////////////////////////////////////
   //  2) POPOLAZIONE E RISORSE FISICHE  //
@@ -85,6 +82,7 @@ typedef struct config {
   // logica
   int user_queue_timeout_sec;    // USER_QUEUE_TIMEOUT_SEC
   int user_meal_duration_ns;     // USER_MEAL_DURATION_NS
+  int user_coffee_duration_ns;   // USER_COFFEE_DURATION_NS
   int user_max_arrival_delay_us; // USER_MAX_ARRIVAL_DELAY_US
 
   // preferenze (%)
