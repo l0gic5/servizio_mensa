@@ -187,7 +187,7 @@ int enter_queue(int sem_index, const char *queue_name, int timeout_sec) {
  *
  * @return 0 se servito con successo, -1 in caso di errore.
  */
-int perform_order(OpType type, int msg_type, double amount) {
+int perform_order(OpType type, int msg_type, double amount, bool has_ticket) {
   if (!g_running) {
     return -1;
   }
@@ -200,7 +200,7 @@ int perform_order(OpType type, int msg_type, double amount) {
   req.food_choice[0] = (type == OP_PRIMI);
   req.food_choice[1] = (type == OP_SECONDI);
   req.food_choice[2] = (type == OP_CAFFE);
-  req.wants_ticket = 0;
+  req.wants_ticket = has_ticket;
 
   if (type == OP_CASSA) {
     LOG_INFO("UTENTE", "Vado alla Cassa per pagare %.2f€...", amount);
@@ -317,7 +317,7 @@ void consume_coffee_bar(Config *cfg) {
  * 3. Mangia Cibo (Tavolo)
  * 4. Prendi Caffè (Se pagato) -> Bevi (Bancone)
  */
-void user_routine(Config *cfg, double *current_budget) {
+void user_routine(Config *cfg, double *current_budget, bool has_ticket) {
   double conto_da_pagare = 0.0;
   double budget_disponibile = *current_budget;
 
@@ -327,6 +327,22 @@ void user_routine(Config *cfg, double *current_budget) {
 
   bool got_primo = false;
   bool got_secondo = false;
+
+  if (has_ticket && g_running) {
+    if (enter_queue(SEM_INDEX_TICKET_READER, "TICKET_READER",
+                    cfg->user_queue_timeout_sec) == 0) {
+      LOG_INFO("UTENTE", "Valido il ticket...");
+      struct timespec t = {0, cfg->ticket_reader_timeout_ns};
+      nanosleep(&t, NULL);
+      sem_signal(g_sem_id, SEM_INDEX_TICKET_READER);
+    } else {
+      // timeout sul lettore ticket
+      // => mangia senza sconto
+      has_ticket = 0;
+      LOG_WARN("UTENTE",
+               "Non sono riuscito a validare il ticket. Mangio senza sconto.");
+    }
+  }
 
   // 1) SCELTA MENU
 
@@ -377,7 +393,7 @@ void user_routine(Config *cfg, double *current_budget) {
     double start = get_current_time_sec();
     if (enter_queue(SEM_INDEX_SEATS_PRIMI, "PRIMI",
                     cfg->user_queue_timeout_sec) == 0) {
-      int res = perform_order(OP_PRIMI, MSG_TYPE_ORDER_PRIMI, 0.0);
+      int res = perform_order(OP_PRIMI, MSG_TYPE_ORDER_PRIMI, 0.0, has_ticket);
 
       if (res == 0) {
         got_primo = true;
@@ -406,7 +422,8 @@ void user_routine(Config *cfg, double *current_budget) {
     double start = get_current_time_sec();
     if (enter_queue(SEM_INDEX_SEATS_SECONDI, "SECONDI",
                     cfg->user_queue_timeout_sec) == 0) {
-      int res = perform_order(OP_SECONDI, MSG_TYPE_ORDER_SECONDI, 0.0);
+      int res =
+          perform_order(OP_SECONDI, MSG_TYPE_ORDER_SECONDI, 0.0, has_ticket);
 
       if (res == 0) {
         got_secondo = true;
@@ -438,17 +455,34 @@ void user_routine(Config *cfg, double *current_budget) {
   // 3) PAGAMENTO ALLA CASSA
 
   bool paid = false;
+
+  double importo_effettivo = conto_da_pagare;
+  if (has_ticket) {
+    double sconto = conto_da_pagare * (cfg->ticket_discount_percent / 100.0);
+    importo_effettivo -= sconto;
+  }
+
   if (g_running && conto_da_pagare > 0.001) {
+
+    if (*current_budget < importo_effettivo) {
+      LOG_WARN("UTENTE", "Budget insufficiente anche con sconto. Esco.");
+      return;
+    }
+
     double start = get_current_time_sec();
     if (enter_queue(SEM_INDEX_SEATS_CASSA, "CASSA",
                     cfg->user_queue_timeout_sec) == 0) {
-      if (perform_order(OP_CASSA, MSG_TYPE_PAYMENT, conto_da_pagare) != -1) {
+
+      if (perform_order(OP_CASSA, MSG_TYPE_PAYMENT, importo_effettivo,
+                        has_ticket) != -1) {
         // Addebito effettivo
-        *current_budget -= conto_da_pagare;
+        *current_budget -= importo_effettivo;
 
         update_wait_stats(OP_CASSA, get_current_time_sec() - start);
 
-        LOG_INFO("UTENTE", "Pagato %.2f€", conto_da_pagare);
+        char *log_msg = has_ticket ? "scontato ticket" : "prezzo intero";
+
+        LOG_INFO("UTENTE", "Pagato %.2f€ [%s]", importo_effettivo, log_msg);
         paid = true;
       }
       sem_signal(g_sem_id, SEM_INDEX_SEATS_CASSA);
@@ -474,7 +508,7 @@ void user_routine(Config *cfg, double *current_budget) {
 
     if (enter_queue(SEM_INDEX_SEATS_CAFFE, "CAFFE",
                     cfg->user_queue_timeout_sec) == 0) {
-      int res = perform_order(OP_CAFFE, MSG_TYPE_ORDER_CAFFE, 0.0);
+      int res = perform_order(OP_CAFFE, MSG_TYPE_ORDER_CAFFE, 0.0, has_ticket);
 
       if (res == 0) {
         update_wait_stats(OP_CAFFE, get_current_time_sec() - start);
@@ -506,7 +540,20 @@ int main(int argc, char *argv[]) {
 
   srand((unsigned int)time(NULL) ^ (unsigned int)getpid());
 
-  const char *config_path = (argc > 1) ? argv[1] : "conf/default.conf";
+  if (argc < 3) {
+    fprintf(stderr, "Usage: %s <config_path> <has_ticket>\n", argv[0]);
+    exit(EXIT_FAILURE);
+  }
+
+  const char *config_path =
+      (argv[1][0] != '\0') ? argv[1] : "conf/default.conf";
+
+  char *endptr;
+  long temp_val = strtol(argv[2], &endptr, 10);
+  bool has_ticket = (endptr == argv[2] || *endptr != '\0' || temp_val == -1)
+                        ? true
+                        : (bool)temp_val;
+
   Config config;
   if (parse_config(config_path, &config) == -1) {
     exit(EXIT_FAILURE);
@@ -559,7 +606,7 @@ int main(int argc, char *argv[]) {
       }
     }
 
-    user_routine(&config, &my_budget);
+    user_routine(&config, &my_budget, has_ticket);
 
     LOG_INFO("UTENTE", "Finito il pasto, attendo chiusura mensa (Giorno %d)...",
              day);

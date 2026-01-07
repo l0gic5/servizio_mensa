@@ -76,6 +76,8 @@ static void apply_config_parameter(Config *config, const char *key,
     config->nof_workers = atoi(value);
   } else if (strcmp(key, "NOF_TABLE_SEATS") == 0) {
     config->nof_table_seats = atoi(value);
+  } else if (strcmp(key, "AVG_USER_W_TICKET") == 0) {
+    config->avg_user_w_ticket = atoi(value);
   }
 
   ///////////////////////////////////////////////////
@@ -92,6 +94,14 @@ static void apply_config_parameter(Config *config, const char *key,
   } else if (strcmp(key, "NOF_WK_SEATS_CASSA") == 0) {
     config->queue_capacity_cassa = atoi(value);
   }
+
+  // tickets
+  else if (strcmp(key, "TICKET_READER_CAPACITY") == 0) {
+    config->ticket_reader_capacity = atoi(value);
+  } else if (strcmp(key, "TICKET_READER_TIMEOUT_NS") == 0) {
+    config->ticket_reader_timeout_ns = atoi(value);
+  }
+
   // postazioni fisiche
   else if (strcmp(key, "WORKSTATIONS_PRIMI") == 0) {
     config->workstations_primi = atoi(value);
@@ -134,6 +144,8 @@ static void apply_config_parameter(Config *config, const char *key,
     config->price_secondi = atoi(value);
   } else if (strcmp(key, "PRICE_CAFFE") == 0) {
     config->price_caffe = atoi(value);
+  } else if (strcmp(key, "TICKET_DISCOUNT_PERCENT") == 0) {
+    config->ticket_discount_percent = atof(value);
   }
 
   //////////////////////////////////////////
@@ -251,6 +263,9 @@ static void set_default_values(Config *config) {
   if (config->nof_table_seats == 0) {
     config->nof_table_seats = 40;
   }
+  if (config->avg_user_w_ticket == 0) {
+    config->avg_user_w_ticket = 80;
+  }
 
   ///////////////////////////////////////////////////
   //  3) CONFIGURAZIONE STAZIONI (Code e Banconi)  //
@@ -269,6 +284,15 @@ static void set_default_values(Config *config) {
   if (config->queue_capacity_cassa == 0) {
     config->queue_capacity_cassa = 20;
   }
+
+  // tickets
+  if (config->ticket_reader_capacity == 0) {
+    config->ticket_reader_capacity = 2;
+  }
+  if (config->ticket_reader_timeout_ns == 0) {
+    config->ticket_reader_timeout_ns = 500000000;
+  }
+
   // postazioni fisiche
   if (config->workstations_primi == 0) {
     config->workstations_primi = 2;
@@ -322,6 +346,9 @@ static void set_default_values(Config *config) {
   }
   if (config->price_caffe == 0) {
     config->price_caffe = 1.2;
+  }
+  if (config->ticket_discount_percent == 0) {
+    config->ticket_discount_percent = 25.0;
   }
 
   //////////////////////////////////////////

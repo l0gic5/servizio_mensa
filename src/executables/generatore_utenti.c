@@ -28,14 +28,16 @@ void int_handler(int sig) {
   keep_running = 0;
 }
 
-pid_t spawn_user(const char *config_path) {
+pid_t spawn_user(const char *config_path, Config *cfg) {
   pid_t pid = fork();
   if (pid == -1) {
     perror("fork");
     return -1;
   }
   if (pid == 0) {
-    char *args[] = {(char *)PATH_UTENTE, (char *)config_path, NULL};
+    char *ticket_arg = (rand() % 100 < cfg->avg_user_w_ticket) ? "1" : "0";
+    char *args[] = {(char *)PATH_UTENTE, (char *)config_path, ticket_arg, NULL};
+
     execve(PATH_UTENTE, args, NULL);
     perror("execve");
     exit(EXIT_FAILURE);
@@ -50,6 +52,7 @@ int main(int argc, char *argv[]) {
   }
 
   signal(SIGINT, int_handler);
+  srand((unsigned int)time(NULL) ^ (unsigned int)getpid());
 
   const char *config_path = argv[1];
   int num_users_to_spawn = 0;
@@ -88,7 +91,7 @@ int main(int argc, char *argv[]) {
          num_users_to_spawn);
 
   for (int i = 0; i < num_users_to_spawn; i++) {
-    pids[i] = spawn_user(config_path);
+    pids[i] = spawn_user(config_path, cfg);
     if (pids[i] > 0) {
       printf(" -> Spawnato PID: %d\n", pids[i]);
       // 20ms delay

@@ -25,9 +25,10 @@ typedef struct config {
   //  2) POPOLAZIONE E RISORSE FISICHE  //
   ////////////////////////////////////////
 
-  int nof_users;       // NOF_USERS
-  int nof_workers;     // NOF_WORKERS
-  int nof_table_seats; // NOF_TABLE_SEATS (Posti a sedere totali)
+  int nof_users;         // NOF_USERS
+  int nof_workers;       // NOF_WORKERS
+  int nof_table_seats;   // NOF_TABLE_SEATS (Posti a sedere totali)
+  int avg_user_w_ticket; // AVG_USER_W_TICKET
 
   ///////////////////////////////////////////////////
   //  3) CONFIGURAZIONE STAZIONI (Code e Banconi)  //
@@ -38,6 +39,10 @@ typedef struct config {
   int queue_capacity_secondi; // NOF_WK_SEATS_SECONDI
   int queue_capacity_caffe;   // NOF_WK_SEATS_CAFFE
   int queue_capacity_cassa;   // NOF_WK_SEATS_CASSA
+
+  // tickets
+  int ticket_reader_capacity;   // TICKET_READER_CAPACITY
+  int ticket_reader_timeout_ns; // TICKET_READER_TIMEOUT_NS
 
   // postazioni fisiche (numero operatori contemporanei)
   int workstations_primi;   // WORKSTATIONS_PRIMI
@@ -62,9 +67,10 @@ typedef struct config {
   int variability_cassa;   // VARIABILITY_CASSA
 
   // prezzi
-  double price_primi;   // PRICE_PRIMI
-  double price_secondi; // PRICE_SECONDI
-  double price_caffe;   // PRICE_CAFFE
+  double price_primi;             // PRICE_PRIMI
+  double price_secondi;           // PRICE_SECONDI
+  double price_caffe;             // PRICE_CAFFE
+  double ticket_discount_percent; // TICKET_DISCOUNT_PERCENT
 
   //////////////////////////////////////////
   //  5) COMPORTAMENTO OPERATORI (Pause)  //

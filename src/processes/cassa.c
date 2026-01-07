@@ -159,7 +159,6 @@ int main(int argc, char *argv[]) {
       g_day_signal = 0;
 
     } else {
-
       MessageRequest req;
 
       // ricezione bloccante di messaggi di tipo PAYMENT
@@ -186,12 +185,14 @@ int main(int argc, char *argv[]) {
           sem_signal(g_sem_id, SEM_INDEX_MUTEX_STATS);
         }
 
-        LOG_INFO("CASSA", "Incasso: %.2f€ (Cliente PID %d)", req.total_cost,
-                 req.sender_pid);
+        char *log_msg = req.wants_ticket ? "scontato ticket" : "prezzo intero";
+        LOG_INFO("CASSA", "Incasso: %.2f€ [%s] (Cliente PID %d)",
+                 req.total_cost, log_msg, req.sender_pid);
 
         MessageResponse resp;
         resp.mtype = req.sender_pid;
         resp.operator_pid = getpid();
+        resp.status = ORDER_SUCCESS;
         send_message(g_msg_id, &resp, RES_PAYLOAD_SIZE, 0);
       } else if (bytes == -1) {
         if (errno == EINTR && g_day_signal) {

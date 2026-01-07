@@ -160,6 +160,7 @@ int setup_ipc() {
   init_sem(g_sem_id, SEM_INDEX_SEATS_SECONDI, g_config.queue_capacity_secondi);
   init_sem(g_sem_id, SEM_INDEX_SEATS_CAFFE, g_config.queue_capacity_caffe);
   init_sem(g_sem_id, SEM_INDEX_SEATS_CASSA, g_config.queue_capacity_cassa);
+  init_sem(g_sem_id, SEM_INDEX_TICKET_READER, g_config.ticket_reader_capacity);
   init_sem(g_sem_id, SEM_INDEX_TABLES, g_config.nof_table_seats);
 
   // Init Mutex
@@ -321,8 +322,15 @@ void start_all_processes(const char *config_path) {
                      &current_worker_id, &pid_index);
 
   // spawn Utenti
-  char *args_utente[] = {(char *)PATH_UTENTE, (char *)config_path, NULL};
   for (int i = 0; i < g_config.nof_users; i++) {
+    int has_ticket = random_probability(g_config.avg_user_w_ticket, rand);
+
+    char ticket_arg[2];
+    sprintf(ticket_arg, "%d", has_ticket);
+
+    char *args_utente[] = {(char *)PATH_UTENTE, (char *)config_path, ticket_arg,
+                           NULL};
+
     g_child_pids[pid_index++] = spawn_process(PATH_UTENTE, args_utente);
   }
 
