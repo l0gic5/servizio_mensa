@@ -65,9 +65,9 @@ typedef struct config {
   int variability_cassa;   // VARIABILITY_CASSA
 
   // prezzi
-  int price_primi;   // PRICE_PRIMI
-  int price_secondi; // PRICE_SECONDI
-  int price_caffe;   // PRICE_CAFFE
+  double price_primi;   // PRICE_PRIMI
+  double price_secondi; // PRICE_SECONDI
+  double price_caffe;   // PRICE_CAFFE
 
   //////////////////////////////////////////
   //  5) COMPORTAMENTO OPERATORI (Pause)  //

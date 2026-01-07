@@ -86,6 +86,18 @@ void handle_day_end(int sig) {
 }
 
 /**
+ * @brief Segnala al Responsabile la fine della giornata lavorativa.
+ *
+ * Utilizza un'operazione di signal sul semaforo di barriera per
+ * notificare al Responsabile che questo operatore ha completato
+ * il proprio turno giornaliero.
+ */
+void signal_end_of_day() {
+  struct sembuf sb = {SEM_INDEX_BARRIER, 1, 0};
+  semop(g_sem_id, &sb, 1);
+}
+
+/**
  * @brief Inizializza le risorse IPC specifiche per l'operatore.
  *
  * Si collega alle memorie condivise (Stats e Roles), alla coda di messaggi
@@ -219,6 +231,52 @@ void attempt_pause(int sem_id, int sem_workstation_index, int *pauses_done,
     // ACCETTABILE !!
     // == il processo potrebbe essere prelevato dalla CPU tra il check e il wait
 
+    if (sem_wait(sem_id, SEM_INDEX_MUTEX_STATS) == -1) {
+      return;
+    }
+
+    int active = 0;
+    switch (role) {
+    case OP_PRIMI:
+      active = g_worker_config->active_primi;
+      break;
+    case OP_SECONDI:
+      active = g_worker_config->active_secondi;
+      break;
+    case OP_CAFFE:
+      active = g_worker_config->active_caffe;
+      break;
+    case OP_CASSA:
+      // superfluo, ma per coerenza
+      active = g_worker_config->active_cassa;
+      break;
+    }
+
+    // SE ultimo rimasto (active <= 1), niente pausa
+    if (active <= 1) {
+      sem_signal(sem_id, SEM_INDEX_MUTEX_STATS);
+      LOG_INFO("OPERATORE", "Pausa negata: unico operatore attivo per %s",
+               ROLE_NAME(role));
+      return;
+    }
+
+    switch (role) {
+    case OP_PRIMI:
+      g_worker_config->active_primi--;
+      break;
+    case OP_SECONDI:
+      g_worker_config->active_secondi--;
+      break;
+    case OP_CAFFE:
+      g_worker_config->active_caffe--;
+      break;
+    case OP_CASSA:
+      // superfluo, ma per coerenza
+      g_worker_config->active_cassa--;
+      break;
+    }
+    sem_signal(sem_id, SEM_INDEX_MUTEX_STATS);
+
     LOG_INFO("OPERATORE", "Pausa %d/%d (Ruolo %s)", *pauses_done + 1,
              config.max_pauses_per_day, ROLE_NAME(role));
 
@@ -233,13 +291,40 @@ void attempt_pause(int sem_id, int sem_workstation_index, int *pauses_done,
     (*pauses_done)++;
 
     LOG_INFO("OPERATORE", "Fine pausa. Attendo postazione...");
-    if (sem_wait(sem_id, sem_workstation_index) == -1) {
-      if (errno != EINTR) {
-        LOG_ERR("OPERATORE", "Errore wait postazione");
+
+    // Attendo postazione fisica per rientrare
+    while (g_running) {
+      if (sem_wait(sem_id, sem_workstation_index) == 0) {
+        break;
       }
-    } else {
-      LOG_INFO("OPERATORE", "Rientrato in servizio.");
+      if (errno != EINTR) {
+        g_running = 0;
+        break;
+      }
     }
+
+    // fine pausa
+    sem_wait(sem_id, SEM_INDEX_MUTEX_STATS);
+
+    switch (role) {
+    case OP_PRIMI:
+      g_worker_config->active_primi++;
+      break;
+    case OP_SECONDI:
+      g_worker_config->active_secondi++;
+      break;
+    case OP_CAFFE:
+      g_worker_config->active_caffe++;
+      break;
+    case OP_CASSA:
+      // superfluo, ma per coerenza
+      g_worker_config->active_cassa++;
+      break;
+    }
+
+    sem_signal(sem_id, SEM_INDEX_MUTEX_STATS);
+
+    LOG_INFO("OPERATORE", "Rientrato in servizio.");
   }
 }
 
@@ -375,8 +460,6 @@ int main(int argc, char *argv[]) {
   for (int day = 1; day <= config.simulation_duration_days; day++) {
 
     // lettura dinamica del ruolo dalla SHM
-    // ogni giorno l'operatore controlla se il responsabile gli ha cambiato
-    // mansione
     OpType my_role = g_worker_config->worker_roles[my_id];
 
     // configurazione parametri locali basati sul ruolo
@@ -393,34 +476,55 @@ int main(int argc, char *argv[]) {
              ROLE_NAME(my_role));
 
     bool acquired = false;
-    while (g_running) {
+
+    // loop di attesa | continua se: 
+    //   - non acquisisce
+    //   - non c'è errore critico
+    //   - la giornata non è finita
+    while (g_running && !g_day_ended) {
       if (sem_wait(g_sem_id, sem_workstation_index) == 0) {
         acquired = true;
         break;
       }
+
+      // Se l'errore NON è un segnale (EINTR), è un errore vero
       if (errno != EINTR) {
         LOG_ERR("OPERATORE", "Errore sem_wait workstation");
         g_running = 0;
         break;
       }
-      // se EINTR, loop ricontrolla g_running
+
+      // Se errno == EINTR, il loop ricomincia e controlla !g_day_ended nel
+      // while
     }
 
-    if (!g_running)
+    if (!g_running) {
       break;
-
-    LOG_INFO("OPERATORE", "Workstation acquisita. Inizio servizio.");
-
-    // 2) ciclo di lavoro
-    service_cycle(g_msg_id, g_sem_id, sem_workstation_index, avg_service_time,
-                  msg_type_req, range_percent, my_role, config);
-
-    // 3) fine giornata
-    // reset flag per il giorno successivo
-    g_day_ended = 0; // Reset per domani
-    if (acquired) {
-      sem_signal(g_sem_id, sem_workstation_index);
     }
+
+    // 2) ramificazione logica:
+    // "ho lavorato o la giornata è finita mentre aspettavo"
+    if (acquired) {
+      LOG_INFO("OPERATORE", "Workstation acquisita. Inizio servizio.");
+
+      service_cycle(g_msg_id, g_sem_id, sem_workstation_index, avg_service_time,
+                    msg_type_req, range_percent, my_role, config);
+
+      // rilascio postazione
+      sem_signal(g_sem_id, sem_workstation_index);
+    } else {
+      // se non ho acquisito, significa che g_day_ended è diventato true mentre
+      // ero in coda
+      if (g_day_ended) {
+        LOG_INFO("OPERATORE", "Giorno %d terminato (senza workstation).", day);
+      }
+    }
+
+    // 3) sincronizzazione fine giornata (codice comune per entrambi i casi)
+    //! reset flag per il giorno successivo
+    g_day_ended = 0;
+
+    signal_end_of_day();
 
     if (g_running) {
       LOG_INFO("OPERATORE", "Giorno %d terminato.", day);

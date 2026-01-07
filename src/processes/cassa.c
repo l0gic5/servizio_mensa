@@ -29,6 +29,7 @@ static int g_sem_id = -1;
 static GlobalStats *g_stats = NULL;
 
 static volatile sig_atomic_t g_running = 1;
+static volatile sig_atomic_t g_day_signal = 0;
 
 /**
  * @brief Gestore per terminazione pulita (SIGINT, SIGTERM).
@@ -39,13 +40,14 @@ void cleanup_handler(int sig) {
 }
 
 /**
- * @brief Gestore per il segnale di fine giornata (SIGUSR1).
+ * @brief Gestore per il segnale di cambio giorno (SIGUSR1).
  *
- * La cassa non chiude tra un giorno e l'altro (rimane attiva nel loop),
- * ma il segnale serve a interrompere msgrcv se bloccata, permettendo
- * eventuali controlli o log di fine giornata se necessari.
+ * @param sig Signal number
  */
-void day_handler(int sig) { (void)sig; }
+void day_handler(int sig) {
+  (void)sig;
+  g_day_signal = 1;
+}
 
 /**
  * @brief Rilascia le risorse locali (detach SHM).
@@ -120,47 +122,61 @@ int main(int argc, char *argv[]) {
 
   bool queue_error = false;
   while (g_running && !queue_error) {
-    MessageRequest req;
+    // SE arriva segnale di fine giornata, segnalo la barriera anche
+    // nel caso in cui la coda non sia mai vuota
+    // (msgrcv non blocca => niente EINTR).
+    if (g_day_signal) {
+      struct sembuf sb = {SEM_INDEX_BARRIER, 1, 0};
+      semop(g_sem_id, &sb, 1);
+      g_day_signal = 0;
 
-    // ricezione bloccante di messaggi di tipo PAYMENT
-    // SE coda vuota => il processo dorme
-    ssize_t bytes =
-        receive_message(g_msg_id, &req, REQ_PAYLOAD_SIZE, MSG_TYPE_PAYMENT, 0);
-
-    if (bytes > 0) {
-      long srv_time =
-          (long)random_variance((double)config.avg_service_cassa,
-                                (double)config.variability_cassa, rand);
-
-      if (srv_time < 0) {
-        srv_time = 0;
-      }
-
-      struct timespec t = {0, srv_time};
-      nanosleep(&t, NULL);
-
-      // statistiche (MUTual EXclusion)
-      if (sem_wait(g_sem_id, SEM_INDEX_MUTEX_STATS) != -1) {
-        g_stats->total_revenue += req.total_cost;
-        g_stats->total_transactions++;
-        sem_signal(g_sem_id, SEM_INDEX_MUTEX_STATS);
-      }
-
-      LOG_INFO("CASSA", "Incasso: %.2f€ (Cliente PID %d)", req.total_cost,
-               req.sender_pid);
-
-      MessageResponse resp;
-      resp.mtype = req.sender_pid;
-      resp.operator_pid = getpid();
-      send_message(g_msg_id, &resp, RES_PAYLOAD_SIZE, 0);
     } else {
-      // SE errore NON è EINTR (segnale interruzione)
-      // => errore vero coda messaggi
-      if (errno != EINTR && g_running) {
-        LOG_ERR("CASSA", "Errore critico msgrcv");
-        queue_error = true;
+
+      MessageRequest req;
+
+      // ricezione bloccante di messaggi di tipo PAYMENT
+      // SE coda vuota => il processo dorme
+      ssize_t bytes = receive_message(g_msg_id, &req, REQ_PAYLOAD_SIZE,
+                                      MSG_TYPE_PAYMENT, 0);
+
+      if (bytes > 0) {
+        long srv_time =
+            (long)random_variance((double)config.avg_service_cassa,
+                                  (double)config.variability_cassa, rand);
+
+        if (srv_time < 0) {
+          srv_time = 0;
+        }
+
+        struct timespec t = {0, srv_time};
+        nanosleep(&t, NULL);
+
+        // statistiche (MUTual EXclusion)
+        if (sem_wait(g_sem_id, SEM_INDEX_MUTEX_STATS) != -1) {
+          g_stats->total_revenue += req.total_cost;
+          g_stats->total_transactions++;
+          sem_signal(g_sem_id, SEM_INDEX_MUTEX_STATS);
+        }
+
+        LOG_INFO("CASSA", "Incasso: %.2f€ (Cliente PID %d)", req.total_cost,
+                 req.sender_pid);
+
+        MessageResponse resp;
+        resp.mtype = req.sender_pid;
+        resp.operator_pid = getpid();
+        send_message(g_msg_id, &resp, RES_PAYLOAD_SIZE, 0);
+      } else if (bytes == -1) {
+        if (errno == EINTR && g_day_signal) {
+          struct sembuf sb = {SEM_INDEX_BARRIER, 1, 0};
+          semop(g_sem_id, &sb, 1);
+
+          g_day_signal = 0;
+
+        } else if (errno != EINTR && g_running) {
+          LOG_ERR("CASSA", "Errore critico msgrcv");
+          queue_error = true;
+        }
       }
-      // errno == EINTR => continue loop
     }
   }
 

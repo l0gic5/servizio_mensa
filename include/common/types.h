@@ -21,19 +21,25 @@
 #define SEM_INDEX_TABLES 4
 #define SEM_INDEX_MUTEX_STATS 5
 #define SEM_INDEX_OUTPUT 6
+#define SEM_INDEX_BARRIER 7
 
 // semafori (operatori)
-#define SEM_OPERATORS_PRIMI 7
-#define SEM_OPERATORS_SECONDI 8
-#define SEM_OPERATORS_CAFFE 9
-#define SEM_OPERATORS_CASSA 10
+#define SEM_OPERATORS_PRIMI 8
+#define SEM_OPERATORS_SECONDI 9
+#define SEM_OPERATORS_CAFFE 10
+#define SEM_OPERATORS_CASSA 11
 
-#define TOTAL_SEMS 11
+#define TOTAL_SEMS 12
 #define MAX_WORKERS 100
 
 typedef struct {
   // indice worker -> enum OpType
   int worker_roles[MAX_WORKERS];
+
+  int active_primi;
+  int active_secondi;
+  int active_caffe;
+  int active_cassa;
 } WorkerConfig;
 
 ///////////////////

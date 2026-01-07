@@ -11,10 +11,12 @@
  * - Gestisce la terminazione e il cleanup delle risorse
  */
 
+#include <errno.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/sem.h>
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
@@ -27,6 +29,11 @@
 #define PATH_OPERATORE "./bin/operatore"
 #define PATH_CASSA "./bin/cassa"
 #define PATH_UTENTE "./bin/utente"
+
+// Timeout (secondi) massimo per ogni "tick" di barriera a fine giornata.
+// Se qualche processo non segnala, il Responsabile non deve bloccarsi
+// indefinitamente.
+#define DAY_END_BARRIER_WAIT_SEC 5
 
 static int g_sem_id = -1;
 static int g_msg_id = -1;
@@ -160,6 +167,7 @@ int setup_ipc() {
   // Init Mutex
   init_sem(g_sem_id, SEM_INDEX_MUTEX_STATS, 1);
   init_sem(g_sem_id, SEM_INDEX_OUTPUT, 1);
+  init_sem(g_sem_id, SEM_INDEX_BARRIER, 0);
 
   // Init Semafori Workstations (Postazioni fisiche operatori)
   init_sem(g_sem_id, SEM_OPERATORS_PRIMI, g_config.workstations_primi);
@@ -289,6 +297,15 @@ void start_all_processes(const char *config_path) {
       g_config.avg_service_secondi, g_config.avg_service_caffe, &w_primi,
       &w_secondi, &w_caffe);
 
+  sem_wait(g_sem_id, SEM_INDEX_MUTEX_STATS);
+
+  g_worker_config->active_primi = w_primi;
+  g_worker_config->active_secondi = w_secondi;
+  g_worker_config->active_caffe = w_caffe;
+  g_worker_config->active_cassa = w_cassa;
+
+  sem_signal(g_sem_id, SEM_INDEX_MUTEX_STATS);
+
   LOG_INFO("RESPONSABILE",
            "Distribuzione Iniziale:\n  - Cassa: %d\n  - Primi: %d\n  - "
            "Secondi: %d\n  - Caffè: %d",
@@ -362,19 +379,40 @@ void print_daily_stats(DailyReport *report, GlobalStats *total_stats) {
 /**
  * @brief Stampa le statistiche finali
  */
-void print_final_stats() {
+void print_final_stats(int days_completed) {
   // protezione lettura statistiche
   sem_wait(g_sem_id, SEM_INDEX_MUTEX_STATS);
   sem_wait(g_sem_id, SEM_INDEX_OUTPUT);
 
+  double avg_primi =
+      (g_stats->total_plates_primi > 0)
+          ? g_stats->total_wait_time_primi / g_stats->total_plates_primi
+          : 0.0;
+  double avg_secondi =
+      (g_stats->total_plates_secondi > 0)
+          ? g_stats->total_wait_time_secondi / g_stats->total_plates_secondi
+          : 0.0;
+  double avg_caffe =
+      (g_stats->total_plates_caffe > 0)
+          ? g_stats->total_wait_time_caffe / g_stats->total_plates_caffe
+          : 0.0;
+
   printf("\n" COLOR_BLUE "======== REPORT FINALE =========" COLOR_RESET "\n");
+  printf("Giorni Completati: %d\n", days_completed);
   printf("Piatti Serviti in totale: %d\n", g_stats->total_users_served);
   printf("Utenti Respinti/Overload: %d\n", g_stats->total_users_refused);
   printf("Piatti Distribuiti:\n  - Primi: %d\n  - Secondi: %d\n  - Caffè: %d\n",
          g_stats->total_plates_primi, g_stats->total_plates_secondi,
          g_stats->total_plates_caffe);
+
+  printf(COLOR_CYAN "======= Totali Accumulati =======\n" COLOR_RESET);
   printf("Transazioni Totali: %d\n", g_stats->total_transactions);
   printf("Ricavo Totale: %.2f€\n", g_stats->total_revenue);
+
+  printf(COLOR_CYAN "===== Tempi Medi Attesa (s) =====\n" COLOR_RESET);
+  printf("  - Primi:   %.4f s\n", avg_primi);
+  printf("  - Secondi: %.4f s\n", avg_secondi);
+  printf("  - Caffè:   %.4f s\n", avg_caffe);
   printf(COLOR_BLUE "================================" COLOR_RESET "\n\n");
 
   sem_signal(g_sem_id, SEM_INDEX_OUTPUT);
@@ -458,104 +496,195 @@ void perform_periodic_refill() {
 }
 
 /**
+ * @brief Ricalcola e applica la distribuzione dei worker (dal giorno 2).
+ */
+void perform_dynamic_reconfiguration(int available_workers) {
+  int w_cassa = 1;
+  int w_p, w_s, w_c;
+
+  // greedy
+  compute_workers_distribution(available_workers, g_config.avg_service_primi,
+                               g_config.avg_service_secondi,
+                               g_config.avg_service_caffe, &w_p, &w_s, &w_c);
+
+  sem_wait(g_sem_id, SEM_INDEX_MUTEX_STATS);
+
+  int index = 1; // salta cassa (index 0)
+  for (int k = 0; k < w_p; k++) {
+    g_worker_config->worker_roles[index++] = OP_PRIMI;
+  }
+  for (int k = 0; k < w_s; k++) {
+    g_worker_config->worker_roles[index++] = OP_SECONDI;
+  }
+  for (int k = 0; k < w_c; k++) {
+    g_worker_config->worker_roles[index++] = OP_CAFFE;
+  }
+
+  g_worker_config->active_primi = w_p;
+  g_worker_config->active_secondi = w_s;
+  g_worker_config->active_caffe = w_c;
+
+  sem_signal(g_sem_id, SEM_INDEX_MUTEX_STATS);
+
+  LOG_INFO("RESPONSABILE",
+           "Ruoli aggiornati: Cassa:%d, Primi:%d, Secondi:%d, Caffè:%d",
+           w_cassa, w_p, w_s, w_c);
+}
+
+/**
+ * @brief Esegue il ciclo temporale della giornata (simulazione ore lavorative).
+ */
+void simulate_day_cycle() {
+  int total_minutes = (g_config.daily_service_minutes > 0)
+                          ? g_config.daily_service_minutes
+                          : 120;
+  int num_cycles = total_minutes / g_config.refill_interval_minutes;
+  int remainder_minutes = total_minutes % g_config.refill_interval_minutes;
+
+  // calcolo nanosecondi per ciclo di refill
+  long cycle_nanos =
+      (long)g_config.n_nanosecs_as_minute * g_config.refill_interval_minutes;
+  struct timespec ts_cycle = {0, 0};
+  ts_cycle.tv_sec = cycle_nanos / 1000000000L;
+  ts_cycle.tv_nsec = cycle_nanos % 1000000000L;
+
+  for (int i = 0; i < num_cycles; i++) {
+    if (g_shutdown) {
+      return;
+    }
+
+    if (nanosleep(&ts_cycle, NULL) == -1 && errno == EINTR) {
+      if (g_shutdown) {
+        return;
+      }
+    }
+    perform_periodic_refill();
+  }
+
+  // minuti residui
+  if (!g_shutdown && remainder_minutes > 0) {
+    long rem_nanos = (long)g_config.n_nanosecs_as_minute * remainder_minutes;
+    struct timespec ts_rem = {0, 0};
+    ts_rem.tv_sec = rem_nanos / 1000000000L;
+    ts_rem.tv_nsec = rem_nanos % 1000000000L;
+    nanosleep(&ts_rem, NULL);
+  }
+}
+
+/**
+ * @brief Gestisce la fine della giornata: invia segnali e attende barriera.
+ * Implementa logica robusta anti-deadlock (Zombie Reaping).
+ */
+void handle_day_end_sync() {
+  int active_children = 0;
+
+  // invia SIGUSR1 solo ai processi vivi
+  for (int i = 0; i < g_total_children; i++) {
+    if (g_child_pids[i] > 0) {
+      int status;
+      pid_t res = waitpid(g_child_pids[i], &status, WNOHANG);
+
+      if (res == 0) {
+        // processo vivo
+        if (kill(g_child_pids[i], SIGUSR1) == 0) {
+          active_children++;
+        } else {
+          g_child_pids[i] = 0;
+        }
+      } else {
+        // processo morto (zombie o errore)
+        if (res > 0) {
+          LOG_WARN("RESPONSABILE", "PID %d terminato prematuramente.",
+                   g_child_pids[i]);
+        }
+        g_child_pids[i] = 0;
+      }
+    }
+  }
+
+  LOG_INFO("RESPONSABILE", "Attesa sincronizzazione da %d processi...",
+           active_children);
+
+  // barrier wait (sincronizzazione fine giornata)
+  for (int i = 0; i < active_children; i++) {
+    struct sembuf sb = {SEM_INDEX_BARRIER, -1, 0};
+    struct timespec timeout = {DAY_END_BARRIER_WAIT_SEC, 0};
+
+    if (semtimedop(g_sem_id, &sb, 1, &timeout) == -1) {
+
+      // CASO 1 => interruzione da segnale
+      if (errno == EINTR) {
+        // decremento 'i' => prossimo ciclo del for fa i++
+        i--;
+
+        if (g_shutdown) {
+          break;
+        }
+      }
+      // CASO 2 => errore (timeout o errore critico)
+      else {
+        if (errno == EAGAIN) {
+          LOG_ERR("RESPONSABILE", "Timeout barriera fine giornata: un processo "
+                                  "non ha sincronizzato. Forzo shutdown.");
+        } else {
+          LOG_ERR("RESPONSABILE", "Errore critico wait barriera");
+        }
+
+        g_shutdown = 1;
+
+        // best effort: termina i figli rimasti per evitare blocchi su IPC
+        for (int k = 0; k < g_total_children; k++) {
+          if (g_child_pids && g_child_pids[k] > 0) {
+            kill(g_child_pids[k], SIGTERM);
+          }
+        }
+        break;
+      }
+    }
+  }
+
+  LOG_INFO("RESPONSABILE", "Sincronizzazione completata.");
+}
+
+/**
  * @brief Loop principale della simulazione.
  */
-void run_simulation_loop(const char *config_path) {
+void run_simulation_loop(const char *config_path, int *day) {
   bool overload = false;
   GlobalStats start_of_day_stats = {0};
 
-  for (int day = 1; day <= g_config.simulation_duration_days && !overload;
-       day++) {
-    LOG_INFO("RESPONSABILE", COLOR_CYAN "Inizio Giorno %d" COLOR_RESET, day);
+  for ((*day) = 1; (*day) <= g_config.simulation_duration_days && !overload;
+       (*day)++) {
+    LOG_INFO("RESPONSABILE", COLOR_CYAN "Inizio Giorno %d" COLOR_RESET, (*day));
 
-    if (day == 1) {
+    // avvio o refill giornaliero
+    if ((*day) == 1) {
       start_all_processes(config_path);
     } else {
       sem_wait(g_sem_id, SEM_INDEX_MUTEX_STATS);
       g_kitchen->remaining_primi = g_config.max_porzioni_primi;
       g_kitchen->remaining_secondi = g_config.max_porzioni_secondi;
       g_kitchen->remaining_caffe = g_config.max_porzioni_caffe;
-
+      // snapshot inizio giornata
       start_of_day_stats = *g_stats;
       sem_signal(g_sem_id, SEM_INDEX_MUTEX_STATS);
 
-      LOG_INFO("RESPONSABILE",
-               "Cucina rifornita:\n  - %d Primi\n  - %d Secondi\n  - %d Caffè",
-               g_config.max_porzioni_primi, g_config.max_porzioni_secondi,
-               g_config.max_porzioni_caffe);
+      LOG_INFO("RESPONSABILE", "Cucina rifornita (Day Start).");
     }
 
-    // RICALCOLO DINAMICO (dal giorno 2)
-    if (day > 1) {
-      // Qui useresti le statistiche del giorno precedente per ricalcolare i
-      // pesi Esempio: compute_workers_distribution con nuovi parametri E poi
-      // aggiornamento SHM:
-
-      // Per semplicità qui ricalcoliamo la stessa config base, ma
-      // dovresti implementare logica basata su stats->total_waiting_time
-      int w_cassa = 1;
-      int w_p, w_s, w_c;
-      compute_workers_distribution(
-          g_config.nof_workers - w_cassa, g_config.avg_service_primi,
-          g_config.avg_service_secondi, g_config.avg_service_caffe, &w_p, &w_s,
-          &w_c);
-
-      int index = 1; // Salta cassa
-      for (int k = 0; k < w_p; k++) {
-        g_worker_config->worker_roles[index++] = OP_PRIMI;
-      }
-      for (int k = 0; k < w_s; k++) {
-        g_worker_config->worker_roles[index++] = OP_SECONDI;
-      }
-      for (int k = 0; k < w_c; k++) {
-        g_worker_config->worker_roles[index++] = OP_CAFFE;
-      }
-
-      LOG_INFO("RESPONSABILE",
-               "Ruoli aggiornati a seguito del ricalcolo dinamico:\n  - "
-               "Cassa: %d\n  - Primi: %d\n  - Secondi: %d\n  - Caffè: %d",
-               w_cassa, w_p, w_s, w_c);
+    if ((*day) > 1) {
+      perform_dynamic_reconfiguration(g_config.nof_workers - 1);
     }
 
-    // SIMULAZIONE TEMPO
-    int total_minutes = (g_config.daily_service_minutes > 0)
-                            ? g_config.daily_service_minutes
-                            : 120;
+    // simulazione tempo
+    simulate_day_cycle();
 
-    // numero di cicli da 10 minuti che stanno nella giornata
-    int num_cycles = total_minutes / g_config.refill_interval_minutes;
-    int remainder_minutes = total_minutes % g_config.refill_interval_minutes;
-
-    // durata nanosecondi per 10 minuti simulati
-    long cycle_nanos =
-        (long)g_config.n_nanosecs_as_minute * g_config.refill_interval_minutes;
-    struct timespec ts_cycle = {0};
-    ts_cycle.tv_sec = cycle_nanos / 1000000000L;
-    ts_cycle.tv_nsec = cycle_nanos % 1000000000L;
-
-    for (int i = 0; i < num_cycles; i++) {
-      if (g_shutdown) {
-        break;
-      }
-
-      if (nanosleep(&ts_cycle, NULL) == -1 && errno == EINTR) {
-        if (g_shutdown) {
-          break;
-        }
-      }
-
-      perform_periodic_refill();
+    if (g_shutdown) {
+      break;
     }
 
-    // gestione minuti residui
-    if (!g_shutdown && remainder_minutes > 0) {
-      long rem_nanos = (long)g_config.n_nanosecs_as_minute * remainder_minutes;
-      struct timespec ts_rem;
-      ts_rem.tv_sec = rem_nanos / 1000000000L;
-      ts_rem.tv_nsec = rem_nanos % 1000000000L;
-
-      nanosleep(&ts_rem, NULL);
-    }
+    // fine giornata & sincronizzazione
+    handle_day_end_sync();
 
     if (g_shutdown) {
       break;
@@ -563,26 +692,25 @@ void run_simulation_loop(const char *config_path) {
 
     DailyReport report;
     memset(&report, 0, sizeof(DailyReport));
-    report.day_number = day;
+    report.day_number = (*day);
 
     sem_wait(g_sem_id, SEM_INDEX_MUTEX_STATS);
-    GlobalStats end_of_day_stats = *g_stats;
+    GlobalStats end = *g_stats;
     KitchenState leftovers = *g_kitchen;
     sem_signal(g_sem_id, SEM_INDEX_MUTEX_STATS);
 
-    // calcolo delta (oggi - ieri)
-    report.daily_users_served = end_of_day_stats.total_users_served -
-                                start_of_day_stats.total_users_served;
-    report.daily_users_refused = end_of_day_stats.total_users_refused -
-                                 start_of_day_stats.total_users_refused;
-    report.daily_plates_primi = end_of_day_stats.total_plates_primi -
-                                start_of_day_stats.total_plates_primi;
-    report.daily_plates_secondi = end_of_day_stats.total_plates_secondi -
-                                  start_of_day_stats.total_plates_secondi;
-    report.daily_plates_caffe = end_of_day_stats.total_plates_caffe -
-                                start_of_day_stats.total_plates_caffe;
-    report.daily_revenue =
-        end_of_day_stats.total_revenue - start_of_day_stats.total_revenue;
+    // calcolo delta
+    report.daily_users_served =
+        end.total_users_served - start_of_day_stats.total_users_served;
+    report.daily_users_refused =
+        end.total_users_refused - start_of_day_stats.total_users_refused;
+    report.daily_plates_primi =
+        end.total_plates_primi - start_of_day_stats.total_plates_primi;
+    report.daily_plates_secondi =
+        end.total_plates_secondi - start_of_day_stats.total_plates_secondi;
+    report.daily_plates_caffe =
+        end.total_plates_caffe - start_of_day_stats.total_plates_caffe;
+    report.daily_revenue = end.total_revenue - start_of_day_stats.total_revenue;
 
     report.leftover_primi =
         (leftovers.remaining_primi > 0) ? leftovers.remaining_primi : 0;
@@ -590,36 +718,30 @@ void run_simulation_loop(const char *config_path) {
         (leftovers.remaining_secondi > 0) ? leftovers.remaining_secondi : 0;
     report.leftover_caffe = leftovers.remaining_caffe;
 
-    report.daily_wait_primi = end_of_day_stats.total_wait_time_primi -
-                              start_of_day_stats.total_wait_time_primi;
-    report.daily_wait_secondi = end_of_day_stats.total_wait_time_secondi -
+    // delta tempi
+    report.daily_wait_primi =
+        end.total_wait_time_primi - start_of_day_stats.total_wait_time_primi;
+    report.daily_wait_secondi = end.total_wait_time_secondi -
                                 start_of_day_stats.total_wait_time_secondi;
-    report.daily_wait_caffe = end_of_day_stats.total_wait_time_caffe -
-                              start_of_day_stats.total_wait_time_caffe;
-    report.daily_wait_cassa = end_of_day_stats.total_wait_time_cassa -
-                              start_of_day_stats.total_wait_time_cassa;
+    report.daily_wait_caffe =
+        end.total_wait_time_caffe - start_of_day_stats.total_wait_time_caffe;
 
-    print_daily_stats(&report, &end_of_day_stats);
+    print_daily_stats(&report, &end);
 
-    start_of_day_stats = end_of_day_stats;
+    // aggiorno snapshot per domani
+    start_of_day_stats = end;
 
-    // SIGUSR1 = fine giornata
-    for (int i = 0; i < g_total_children; i++) {
-      if (g_child_pids[i] > 0)
-        kill(g_child_pids[i], SIGUSR1);
-    }
-
-    // controllo overload
+    // check overload
     if (report.daily_users_refused > g_config.overload_threshold) {
-      LOG_ERR("RESPONSABILE",
-              "TERMINAZIONE: Overload Giornaliero (%d respinti > soglia %d)",
+      LOG_ERR("RESPONSABILE", "TERMINAZIONE: Overload (%d > %d)",
               report.daily_users_refused, g_config.overload_threshold);
       overload = true;
     }
   }
 
-  if (!overload)
+  if (!overload && !g_shutdown) {
     LOG_INFO("RESPONSABILE", "Simulazione completata.");
+  }
 }
 
 int main(int argc, char *argv[]) {
@@ -664,9 +786,11 @@ int main(int argc, char *argv[]) {
       g_config.max_porzioni_primi, g_config.max_porzioni_secondi,
       g_config.max_porzioni_caffe);
 
-  run_simulation_loop(config_path);
+  int day_counter = 1;
 
-  print_final_stats();
+  run_simulation_loop(config_path, &day_counter);
+
+  print_final_stats(--day_counter);
   cleanup_resources();
 
   return 0;

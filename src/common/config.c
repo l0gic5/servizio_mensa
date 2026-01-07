@@ -220,7 +220,7 @@ static void set_default_values(Config *config) {
   ///////////////////////////////////////////////
 
   if (config->simulation_duration_days == 0) {
-    config->simulation_duration_days = 30;
+    config->simulation_duration_days = 15;
   }
   if (config->n_nanosecs_as_minute == 0) {
     config->n_nanosecs_as_minute = 100000000;
@@ -232,7 +232,7 @@ static void set_default_values(Config *config) {
     config->system_startup_delay_sec = 2;
   }
   if (config->overload_threshold == 0) {
-    config->overload_threshold = 10;
+    config->overload_threshold = 50;
   }
   // cassa position default is INGRESSO (enum 0)
 
@@ -240,13 +240,13 @@ static void set_default_values(Config *config) {
   //  2) POPOLAZIONE E RISORSE FISICHE  //
   ////////////////////////////////////////
   if (config->nof_users == 0) {
-    config->nof_users = 40;
+    config->nof_users = 50;
   }
   if (config->nof_workers == 0) {
     config->nof_workers = 6;
   }
   if (config->nof_table_seats == 0) {
-    config->nof_table_seats = 30;
+    config->nof_table_seats = 40;
   }
 
   ///////////////////////////////////////////////////
@@ -255,26 +255,26 @@ static void set_default_values(Config *config) {
 
   // capacità code
   if (config->queue_capacity_primi == 0) {
-    config->queue_capacity_primi = 10;
+    config->queue_capacity_primi = 15;
   }
   if (config->queue_capacity_secondi == 0) {
-    config->queue_capacity_secondi = 10;
+    config->queue_capacity_secondi = 15;
   }
   if (config->queue_capacity_caffe == 0) {
-    config->queue_capacity_caffe = 15;
+    config->queue_capacity_caffe = 20;
   }
   if (config->queue_capacity_cassa == 0) {
-    config->queue_capacity_cassa = 15;
+    config->queue_capacity_cassa = 20;
   }
   // postazioni fisiche
   if (config->workstations_primi == 0) {
-    config->workstations_primi = 5;
+    config->workstations_primi = 2;
   }
   if (config->workstations_secondi == 0) {
-    config->workstations_secondi = 5;
+    config->workstations_secondi = 2;
   }
   if (config->workstations_caffe == 0) {
-    config->workstations_caffe = 5;
+    config->workstations_caffe = 2;
   }
   if (config->workstations_cassa == 0) {
     config->workstations_cassa = 1;
@@ -286,39 +286,39 @@ static void set_default_values(Config *config) {
 
   // tempi medi
   if (config->avg_service_primi == 0) {
-    config->avg_service_primi = 5000;
+    config->avg_service_primi = 100000000;
   }
   if (config->avg_service_secondi == 0) {
-    config->avg_service_secondi = 6000;
+    config->avg_service_secondi = 120000000;
   }
   if (config->avg_service_caffe == 0) {
-    config->avg_service_caffe = 2000;
+    config->avg_service_caffe = 50000000;
   }
   if (config->avg_service_cassa == 0) {
-    config->avg_service_cassa = 3000;
+    config->avg_service_cassa = 60000000;
   }
   // variabilità
   if (config->variability_primi == 0) {
-    config->variability_primi = 50;
+    config->variability_primi = 30;
   }
   if (config->variability_secondi == 0) {
-    config->variability_secondi = 50;
+    config->variability_secondi = 30;
   }
   if (config->variability_caffe == 0) {
-    config->variability_caffe = 80;
+    config->variability_caffe = 20;
   }
   if (config->variability_cassa == 0) {
-    config->variability_cassa = 10;
+    config->variability_cassa = 20;
   }
   // prezzi
   if (config->price_primi == 0) {
-    config->price_primi = 5;
+    config->price_primi = 5.5;
   }
   if (config->price_secondi == 0) {
-    config->price_secondi = 8;
+    config->price_secondi = 8.2;
   }
   if (config->price_caffe == 0) {
-    config->price_caffe = 1;
+    config->price_caffe = 1.2;
   }
 
   //////////////////////////////////////////
@@ -326,10 +326,10 @@ static void set_default_values(Config *config) {
   //////////////////////////////////////////
 
   if (config->max_pauses_per_day == 0) {
-    config->max_pauses_per_day = 3;
+    config->max_pauses_per_day = 2;
   }
   if (config->pause_duration_ns == 0) {
-    config->pause_duration_ns = 500000000;
+    config->pause_duration_ns = 300000000;
   }
   if (config->pause_probability_percent == 0) {
     config->pause_probability_percent = 10;
@@ -344,20 +344,20 @@ static void set_default_values(Config *config) {
     config->user_queue_timeout_sec = 2;
   }
   if (config->user_meal_duration_ns == 0) {
-    config->user_meal_duration_ns = 50000000;
+    config->user_meal_duration_ns = 2000000000;
   }
   if (config->user_max_arrival_delay_us == 0) {
-    config->user_max_arrival_delay_us = 500000;
+    config->user_max_arrival_delay_us = 5000000;
   }
   // preferenze
   if (config->probability_user_wants_primo == 0) {
-    config->probability_user_wants_primo = 70;
+    config->probability_user_wants_primo = 60;
   }
   if (config->probability_user_wants_secondo == 0) {
-    config->probability_user_wants_secondo = 60;
+    config->probability_user_wants_secondo = 70;
   }
   if (config->probability_user_wants_caffe == 0) {
-    config->probability_user_wants_caffe = 30;
+    config->probability_user_wants_caffe = 20;
   }
 
   // budget
@@ -365,10 +365,10 @@ static void set_default_values(Config *config) {
     config->user_budget_min = 10;
   }
   if (config->user_budget_max == 0) {
-    config->user_budget_max = 30;
+    config->user_budget_max = 50;
   }
   if (config->user_min_daily_salary == 0) {
-    config->user_min_daily_salary = 6;
+    config->user_min_daily_salary = 5;
   }
   if (config->user_max_daily_salary == 0) {
     config->user_max_daily_salary = 15;
@@ -381,20 +381,22 @@ static void set_default_values(Config *config) {
   if (config->refill_interval_minutes == 0) {
     config->refill_interval_minutes = 10;
   }
+
   if (config->avg_refill_primi == 0) {
-    config->avg_refill_primi = 50000;
+    config->avg_refill_primi = 40;
   }
   if (config->avg_refill_secondi == 0) {
-    config->avg_refill_secondi = 50000;
+    config->avg_refill_secondi = 40;
   }
+
   if (config->max_porzioni_primi == 0) {
-    config->max_porzioni_primi = 100;
+    config->max_porzioni_primi = 50;
   }
   if (config->max_porzioni_secondi == 0) {
-    config->max_porzioni_secondi = 100;
+    config->max_porzioni_secondi = 50;
   }
   if (config->max_porzioni_caffe == 0) {
-    config->max_porzioni_caffe = 10000;
+    config->max_porzioni_caffe = 1000;
   }
 }
 

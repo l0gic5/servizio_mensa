@@ -30,6 +30,7 @@ static int g_shm_stats_id = -1;
 static GlobalStats *g_stats = NULL;
 
 static volatile sig_atomic_t g_running = 1;
+static volatile sig_atomic_t g_day_ended = 0;
 
 /**
  * @brief Gestore segnali di terminazione
@@ -44,7 +45,15 @@ void stop_handler(int sig) {
  * Serve solo a "svegliare" la pause() intercettando il segnale
  * invece di far terminare il processo.
  */
-void day_change_handler(int sig) { (void)sig; }
+void day_change_handler(int sig) {
+  (void)sig;
+  g_day_ended = 1;
+}
+
+void signal_end_of_day() {
+  struct sembuf sb = {SEM_INDEX_BARRIER, 1, 0};
+  semop(g_sem_id, &sb, 1);
+}
 
 /**
  * @brief Restituisce il timestamp corrente in secondi (con precisione
@@ -80,6 +89,16 @@ void update_wait_stats(OpType type, double wait_time) {
   }
 
   sem_signal(g_sem_id, SEM_INDEX_MUTEX_STATS);
+}
+
+/**
+ * @brief Segnala che l'utente è stato rifiutato (code piene).
+ */
+void mark_as_refused() {
+  if (sem_wait(g_sem_id, SEM_INDEX_MUTEX_STATS) != -1) {
+    g_stats->total_users_refused++;
+    sem_signal(g_sem_id, SEM_INDEX_MUTEX_STATS);
+  }
 }
 
 /**
@@ -121,6 +140,7 @@ int enter_queue(int sem_index, const char *queue_name, int timeout_sec) {
   if (!g_running) {
     return -1;
   }
+
   LOG_INFO("UTENTE", "Tento accesso coda %s...", queue_name);
 
   struct sembuf sb;
@@ -139,11 +159,14 @@ int enter_queue(int sem_index, const char *queue_name, int timeout_sec) {
     if (errno == EAGAIN) {
       LOG_WARN("UTENTE", "Coda %s troppo lenta! Rinuncio al piatto.",
                queue_name);
+      mark_as_refused();
       return -1;
     }
 
     // interruzione segnale (fine giornata)
     if (errno == EINTR) {
+      LOG_WARN("UTENTE", "Mensa chiusa mentre ero in coda %s!", queue_name);
+      mark_as_refused();
       return -1;
     }
 
@@ -199,6 +222,7 @@ int perform_order(OpType type, int msg_type, double amount) {
     // => logga solo se non è EINTR pulito
     if (errno != EINTR) {
       LOG_ERR("UTENTE", "Nessuna risposta da %s", ROLE_NAME(type));
+      mark_as_refused();
     }
     return -1;
   }
@@ -228,8 +252,9 @@ void consume_meal(Config *cfg) {
   }
 
   LOG_INFO("UTENTE", "Cerco tavolo...");
-  if (sem_wait(g_sem_id, SEM_INDEX_TABLES) == -1)
+  if (sem_wait(g_sem_id, SEM_INDEX_TABLES) == -1) {
     return;
+  }
 
   LOG_INFO("UTENTE", "Mangio...");
 
@@ -291,62 +316,68 @@ void user_routine(Config *cfg, double *current_budget) {
     conto_da_pagare += cfg->price_caffe;
   }
 
-  if (conto_da_pagare == 0.0) {
+  if (conto_da_pagare <= 0.001) {
     LOG_WARN("UTENTE", "Troppo povero oggi (%.2f€)! Salto il pasto.",
              *current_budget);
     return;
   }
 
+  // primi
   if (wants_primo && g_running) {
     double start = get_current_time_sec();
     if (enter_queue(SEM_INDEX_SEATS_PRIMI, "PRIMI",
                     cfg->user_queue_timeout_sec) == 0) {
+      int res = perform_order(OP_PRIMI, MSG_TYPE_ORDER_PRIMI, 0.0);
 
-      int outcome = perform_order(OP_PRIMI, MSG_TYPE_ORDER_PRIMI, 0.0);
-
-      if (outcome == 0) {
-        double end = get_current_time_sec();
-        update_wait_stats(OP_PRIMI, end - start);
-      } else if (outcome == -1) {
-        return;
-      } else if (outcome == -2) {
-        // caso piatti finiti: rimborso budget e non mangio
+      if (res == 0) {
+        update_wait_stats(OP_PRIMI, get_current_time_sec() - start);
+      } else if (res == -2) {
+        // rimborso
         *current_budget += cfg->price_primi;
         conto_da_pagare -= cfg->price_primi;
-        LOG_INFO("UTENTE", "Niente primo oggi (esaurito). Risparmiati %.2f€",
-                 (double)cfg->price_primi);
-      }
+        wants_primo = false;
 
+        if (!wants_secondo && *current_budget >= cfg->price_secondi) {
+          LOG_INFO("UTENTE", "Primo finito. Ripiego sul SECONDO.");
+          wants_secondo = true;
+          *current_budget -= cfg->price_secondi;
+          conto_da_pagare += cfg->price_secondi;
+        } else {
+          LOG_INFO("UTENTE",
+                   "Primo finito. Nessuna alternativa o budget insufficiente.");
+        }
+      }
       sem_signal(g_sem_id, SEM_INDEX_SEATS_PRIMI);
     } else {
-      *current_budget += cfg->price_primi;
-      conto_da_pagare -= cfg->price_primi;
+      return;
     }
   }
 
+  // secondi
   if (wants_secondo && g_running) {
     double start = get_current_time_sec();
     if (enter_queue(SEM_INDEX_SEATS_SECONDI, "SECONDI",
                     cfg->user_queue_timeout_sec) == 0) {
-      int outcome = perform_order(OP_SECONDI, MSG_TYPE_ORDER_SECONDI, 0.0);
+      int res = perform_order(OP_SECONDI, MSG_TYPE_ORDER_SECONDI, 0.0);
 
-      if (outcome == 0) {
-        double end = get_current_time_sec();
-        update_wait_stats(OP_SECONDI, end - start);
-      } else if (outcome == -1) {
-        return;
-      } else if (outcome == -2) {
-        // caso piatti finiti: rimborso budget e non mangio
+      if (res == 0) {
+        update_wait_stats(OP_SECONDI, get_current_time_sec() - start);
+      } else if (res == -2) {
         *current_budget += cfg->price_secondi;
         conto_da_pagare -= cfg->price_secondi;
-        LOG_INFO("UTENTE", "Niente secondo oggi (esaurito). Risparmiati %.2f€",
-                 (double)cfg->price_secondi);
-      }
+        wants_secondo = false;
 
+        if (!wants_primo && !wants_caffe &&
+            *current_budget >= cfg->price_caffe) {
+          LOG_INFO("UTENTE", "Secondo finito. Ripiego sul CAFFE.");
+          wants_caffe = true;
+          *current_budget -= cfg->price_caffe;
+          conto_da_pagare += cfg->price_caffe;
+        }
+      }
       sem_signal(g_sem_id, SEM_INDEX_SEATS_SECONDI);
     } else {
-      *current_budget += cfg->price_secondi;
-      conto_da_pagare -= cfg->price_secondi;
+      return;
     }
   }
 
@@ -354,29 +385,22 @@ void user_routine(Config *cfg, double *current_budget) {
     consume_meal(cfg);
   }
 
+  // caffe
   if (wants_caffe && g_running) {
     double start = get_current_time_sec();
     if (enter_queue(SEM_INDEX_SEATS_CAFFE, "CAFFE",
                     cfg->user_queue_timeout_sec) == 0) {
-      int outcome = perform_order(OP_CAFFE, MSG_TYPE_ORDER_CAFFE, 0.0);
+      int res = perform_order(OP_CAFFE, MSG_TYPE_ORDER_CAFFE, 0.0);
 
-      if (outcome == 0) {
-        double end = get_current_time_sec();
-        update_wait_stats(OP_CAFFE, end - start);
-      } else if (outcome == -1) {
-        return;
-      } else if (outcome == -2) {
-        // caso piatti finiti: rimborso budget e non mangio
+      if (res == 0) {
+        update_wait_stats(OP_CAFFE, get_current_time_sec() - start);
+      } else if (res == -2) {
         *current_budget += cfg->price_caffe;
         conto_da_pagare -= cfg->price_caffe;
-        LOG_INFO("UTENTE", "Niente caffè oggi (esaurito). Risparmiati %.2f€",
-                 (double)cfg->price_caffe);
       }
-
       sem_signal(g_sem_id, SEM_INDEX_SEATS_CAFFE);
     } else {
-      *current_budget += cfg->price_caffe;
-      conto_da_pagare -= cfg->price_caffe;
+      return;
     }
   }
 
@@ -437,6 +461,11 @@ int main(int argc, char *argv[]) {
 
   for (int day = 1; day <= config.simulation_duration_days && g_running;
        day++) {
+    // Reset giornaliero: il flag viene alzato dal SIGUSR1 (fine giornata).
+    // Senza questo reset, dopo il primo giorno l'utente non farà più pause()
+    // e segnalerà la barriera anche quando il Responsabile non ha chiuso.
+    g_day_ended = 0;
+
     // ritardo casuale arrivo utente
     if (config.user_max_arrival_delay_us > 0) {
       struct timespec ts = {
@@ -450,6 +479,10 @@ int main(int argc, char *argv[]) {
     double daily_salary = random_range(config.user_min_daily_salary,
                                        config.user_max_daily_salary, rand);
     my_budget += daily_salary;
+
+    if(my_budget > config.user_budget_max) {
+      my_budget = config.user_budget_max;
+    }
 
     LOG_INFO("UTENTE", "Giorno %d: Ricevuto stipendio %.2f€. Totale: %.2f€",
              day, daily_salary, my_budget);
@@ -470,11 +503,13 @@ int main(int argc, char *argv[]) {
 
     // attende il segnale SIGUSR1 dal Responsabile
     // pause() ritorna -1 con errno=EINTR quando arriva un segnale gestito
-    if (g_running) {
+    if (g_running && !g_day_ended) {
       LOG_INFO("UTENTE",
                "Finito il pasto, attendo chiusura mensa (Giorno %d)...", day);
       pause();
     }
+
+    signal_end_of_day();
 
     // Quando arriva SIGUSR1, handle_day_end viene chiamato (vuoto o flag),
     // pause() si sblocca e il ciclo ricomincia.
