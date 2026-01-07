@@ -95,6 +95,9 @@ void cleanup_resources(void) {
     remove_shm(g_shm_roles_id);
   }
 
+  // per utenti generati dinamicamente
+  kill(0, SIGTERM);
+
   LOG_INFO("RESPONSABILE", "Cleanup completato. Terminazione.");
 }
 
@@ -163,6 +166,7 @@ int setup_ipc() {
   init_sem(g_sem_id, SEM_INDEX_MUTEX_STATS, 1);
   init_sem(g_sem_id, SEM_INDEX_OUTPUT, 1);
   init_sem(g_sem_id, SEM_INDEX_BARRIER, 0);
+  init_sem(g_sem_id, SEM_INDEX_DAY_CHANGE, 0);
 
   // Init Semafori Workstations (Postazioni fisiche operatori)
   init_sem(g_sem_id, SEM_OPERATORS_PRIMI, g_config.workstations_primi);
@@ -667,7 +671,13 @@ void run_simulation_loop(const char *config_path, int *day) {
       g_kitchen->remaining_caffe = g_config.max_porzioni_caffe;
       // snapshot inizio giornata
       start_of_day_stats = *g_stats;
+
+      g_worker_config->current_day = *day;
       sem_signal(g_sem_id, SEM_INDEX_MUTEX_STATS);
+
+      // segnalo inizio giornata
+      struct sembuf sb = {SEM_INDEX_DAY_CHANGE, 1, 0};
+      semop(g_sem_id, &sb, 1);
 
       LOG_INFO("RESPONSABILE", "Cucina rifornita (Day Start).");
     }

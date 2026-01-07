@@ -29,7 +29,9 @@
 #define SEM_OPERATORS_CAFFE 10
 #define SEM_OPERATORS_CASSA 11
 
-#define TOTAL_SEMS 12
+#define SEM_INDEX_DAY_CHANGE 12
+
+#define TOTAL_SEMS 13
 #define MAX_WORKERS 100
 
 typedef struct worker_config {
@@ -38,6 +40,7 @@ typedef struct worker_config {
   int total_workers_count;
 
   volatile time_t strike_end_times[MAX_WORKERS];
+  volatile int current_day;
 
   int active_primi;
   int active_secondi;
