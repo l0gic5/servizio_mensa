@@ -319,6 +319,17 @@ void start_all_processes(const char *config_path) {
  * @brief Stampa il report giornaliero calcolato.
  */
 void print_daily_stats(DailyReport *report, GlobalStats *total_stats) {
+  double avg_primi = (report->daily_plates_primi > 0)
+                         ? report->daily_wait_primi / report->daily_plates_primi
+                         : 0.0;
+  double avg_secondi =
+      (report->daily_plates_secondi > 0)
+          ? report->daily_wait_secondi / report->daily_plates_secondi
+          : 0.0;
+  double avg_caffe = (report->daily_plates_caffe > 0)
+                         ? report->daily_wait_caffe / report->daily_plates_caffe
+                         : 0.0;
+
   sem_wait(g_sem_id, SEM_INDEX_OUTPUT);
 
   printf("\n" COLOR_BLUE "========== REPORT GIORNO %d ==========" COLOR_RESET
@@ -337,6 +348,11 @@ void print_daily_stats(DailyReport *report, GlobalStats *total_stats) {
   printf(COLOR_CYAN "======== Totali Accumulati =========\n" COLOR_RESET);
   printf("Totale Serviti:   %d\n", total_stats->total_users_served);
   printf("Totale Ricavi:    %.2f€\n", total_stats->total_revenue);
+
+  printf(COLOR_CYAN "====== Tempi Medi Attesa (s) =======\n" COLOR_RESET);
+  printf("  - Primi:   %.4f s\n", avg_primi);
+  printf("  - Secondi: %.4f s\n", avg_secondi);
+  printf("  - Caffè:   %.4f s\n", avg_caffe);
 
   printf(COLOR_BLUE "====================================" COLOR_RESET "\n\n");
 
@@ -573,6 +589,15 @@ void run_simulation_loop(const char *config_path) {
     report.leftover_secondi =
         (leftovers.remaining_secondi > 0) ? leftovers.remaining_secondi : 0;
     report.leftover_caffe = leftovers.remaining_caffe;
+
+    report.daily_wait_primi = end_of_day_stats.total_wait_time_primi -
+                              start_of_day_stats.total_wait_time_primi;
+    report.daily_wait_secondi = end_of_day_stats.total_wait_time_secondi -
+                                start_of_day_stats.total_wait_time_secondi;
+    report.daily_wait_caffe = end_of_day_stats.total_wait_time_caffe -
+                              start_of_day_stats.total_wait_time_caffe;
+    report.daily_wait_cassa = end_of_day_stats.total_wait_time_cassa -
+                              start_of_day_stats.total_wait_time_cassa;
 
     print_daily_stats(&report, &end_of_day_stats);
 

@@ -142,6 +142,7 @@ int main(int argc, char *argv[]) {
       // statistiche (MUTual EXclusion)
       if (sem_wait(g_sem_id, SEM_INDEX_MUTEX_STATS) != -1) {
         g_stats->total_revenue += req.total_cost;
+        g_stats->total_transactions++;
         sem_signal(g_sem_id, SEM_INDEX_MUTEX_STATS);
       }
 

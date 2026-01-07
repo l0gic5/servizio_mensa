@@ -55,6 +55,12 @@ typedef struct {
   int total_plates_secondi;
   int total_plates_caffe;
 
+  // accumulatori tempo di attesa
+  double total_wait_time_primi;
+  double total_wait_time_secondi;
+  double total_wait_time_caffe;
+  double total_wait_time_cassa;
+
   double total_revenue;
   int total_transactions;
 } GlobalStats;
@@ -70,7 +76,14 @@ typedef struct {
   int daily_plates_secondi;
   int daily_plates_caffe;
 
+  // delta tempi attesa
+  double daily_wait_primi;
+  double daily_wait_secondi;
+  double daily_wait_caffe;
+  double daily_wait_cassa;
+
   double daily_revenue;
+  int daily_transactions;
 
   // avanzi
   int leftover_primi;

@@ -26,6 +26,8 @@
 
 static int g_sem_id = -1;
 static int g_msg_id = -1;
+static int g_shm_stats_id = -1;
+static GlobalStats *g_stats = NULL;
 
 static volatile sig_atomic_t g_running = 1;
 
@@ -45,16 +47,64 @@ void stop_handler(int sig) {
 void day_change_handler(int sig) { (void)sig; }
 
 /**
+ * @brief Restituisce il timestamp corrente in secondi (con precisione
+ * nanosecondi)
+ */
+double get_current_time_sec() {
+  struct timespec ts;
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+  return (double)ts.tv_sec + (double)ts.tv_nsec * 1e-9;
+}
+
+/**
+ * @brief Aggiorna le statistiche dei tempi di attesa in SHM
+ */
+void update_wait_stats(OpType type, double wait_time) {
+  if (sem_wait(g_sem_id, SEM_INDEX_MUTEX_STATS) == -1) {
+    return;
+  }
+
+  switch (type) {
+  case OP_PRIMI:
+    g_stats->total_wait_time_primi += wait_time;
+    break;
+  case OP_SECONDI:
+    g_stats->total_wait_time_secondi += wait_time;
+    break;
+  case OP_CAFFE:
+    g_stats->total_wait_time_caffe += wait_time;
+    break;
+  case OP_CASSA:
+    g_stats->total_wait_time_cassa += wait_time;
+    break;
+  }
+
+  sem_signal(g_sem_id, SEM_INDEX_MUTEX_STATS);
+}
+
+/**
  * @brief Inizializza IPC collegandosi alle risorse esistenti
  */
 int setup_ipc(void) {
   g_sem_id = create_sem_set(TOTAL_SEMS);
   g_msg_id = create_msg_queue();
 
-  if (g_sem_id == -1 || g_msg_id == -1) {
+  g_shm_stats_id = allocate_shm(sizeof(GlobalStats), FTOK_SHM_ID);
+  g_stats = (GlobalStats *)attach_shm(g_shm_stats_id);
+
+  if (g_sem_id == -1 || g_msg_id == -1 || g_stats == NULL) {
     return -1;
   }
   return 0;
+}
+
+/**
+ * @brief Rilascia le risorse locali (detach SHM).
+ */
+void cleanup_resources() {
+  if (g_stats) {
+    detach_shm(g_stats);
+  }
 }
 
 /**
@@ -68,6 +118,9 @@ int setup_ipc(void) {
  * @return 0 se acquisito, -1 se rinuncia.
  */
 int enter_queue(int sem_index, const char *queue_name, int timeout_sec) {
+  if (!g_running) {
+    return -1;
+  }
   LOG_INFO("UTENTE", "Tento accesso coda %s...", queue_name);
 
   struct sembuf sb;
@@ -112,6 +165,10 @@ int enter_queue(int sem_index, const char *queue_name, int timeout_sec) {
  * @return 0 se servito con successo, -1 in caso di errore.
  */
 int perform_order(OpType type, int msg_type, double amount) {
+  if (!g_running) {
+    return -1;
+  }
+
   MessageRequest req;
   req.mtype = msg_type;
   req.sender_pid = getpid();
@@ -166,6 +223,10 @@ int perform_order(OpType type, int msg_type, double amount) {
  * * Richiede un posto a sedere (Tavolo).
  */
 void consume_meal(Config *cfg) {
+  if (!g_running) {
+    return;
+  }
+
   LOG_INFO("UTENTE", "Cerco tavolo...");
   if (sem_wait(g_sem_id, SEM_INDEX_TABLES) == -1)
     return;
@@ -236,13 +297,17 @@ void user_routine(Config *cfg, double *current_budget) {
     return;
   }
 
-  if (wants_primo) {
+  if (wants_primo && g_running) {
+    double start = get_current_time_sec();
     if (enter_queue(SEM_INDEX_SEATS_PRIMI, "PRIMI",
                     cfg->user_queue_timeout_sec) == 0) {
 
       int outcome = perform_order(OP_PRIMI, MSG_TYPE_ORDER_PRIMI, 0.0);
 
-      if (outcome == -1) {
+      if (outcome == 0) {
+        double end = get_current_time_sec();
+        update_wait_stats(OP_PRIMI, end - start);
+      } else if (outcome == -1) {
         return;
       } else if (outcome == -2) {
         // caso piatti finiti: rimborso budget e non mangio
@@ -259,12 +324,16 @@ void user_routine(Config *cfg, double *current_budget) {
     }
   }
 
-  if (wants_secondo) {
+  if (wants_secondo && g_running) {
+    double start = get_current_time_sec();
     if (enter_queue(SEM_INDEX_SEATS_SECONDI, "SECONDI",
                     cfg->user_queue_timeout_sec) == 0) {
       int outcome = perform_order(OP_SECONDI, MSG_TYPE_ORDER_SECONDI, 0.0);
 
-      if (outcome == -1) {
+      if (outcome == 0) {
+        double end = get_current_time_sec();
+        update_wait_stats(OP_SECONDI, end - start);
+      } else if (outcome == -1) {
         return;
       } else if (outcome == -2) {
         // caso piatti finiti: rimborso budget e non mangio
@@ -281,16 +350,20 @@ void user_routine(Config *cfg, double *current_budget) {
     }
   }
 
-  if (wants_primo || wants_secondo) {
+  if ((wants_primo || wants_secondo) && g_running) {
     consume_meal(cfg);
   }
 
-  if (wants_caffe) {
+  if (wants_caffe && g_running) {
+    double start = get_current_time_sec();
     if (enter_queue(SEM_INDEX_SEATS_CAFFE, "CAFFE",
                     cfg->user_queue_timeout_sec) == 0) {
       int outcome = perform_order(OP_CAFFE, MSG_TYPE_ORDER_CAFFE, 0.0);
 
-      if (outcome == -1) {
+      if (outcome == 0) {
+        double end = get_current_time_sec();
+        update_wait_stats(OP_CAFFE, end - start);
+      } else if (outcome == -1) {
         return;
       } else if (outcome == -2) {
         // caso piatti finiti: rimborso budget e non mangio
@@ -313,21 +386,36 @@ void user_routine(Config *cfg, double *current_budget) {
     return;
   }
 
-  if (enter_queue(SEM_INDEX_SEATS_CASSA, "CASSA",
-                  cfg->user_queue_timeout_sec) == 0) {
-    if (perform_order(OP_CASSA, MSG_TYPE_PAYMENT, conto_da_pagare) != -1) {
-      *current_budget -= conto_da_pagare;
-      LOG_INFO("UTENTE", "Pagamento di %.2f€ completato. Saldo residuo: %.2f€",
-               conto_da_pagare, *current_budget);
+  if (g_running) {
+    double start = get_current_time_sec();
+    if (enter_queue(SEM_INDEX_SEATS_CASSA, "CASSA",
+                    cfg->user_queue_timeout_sec) == 0) {
+      if (perform_order(OP_CASSA, MSG_TYPE_PAYMENT, conto_da_pagare) != -1) {
+        *current_budget -= conto_da_pagare;
+
+        double end = get_current_time_sec();
+        update_wait_stats(OP_CASSA, end - start);
+
+        LOG_INFO("UTENTE",
+                 "Pagamento di %.2f€ completato. Saldo residuo: %.2f€",
+                 conto_da_pagare, *current_budget);
+      }
+      sem_signal(g_sem_id, SEM_INDEX_SEATS_CASSA);
     }
-    sem_signal(g_sem_id, SEM_INDEX_SEATS_CASSA);
   }
 }
 
 int main(int argc, char *argv[]) {
-  signal(SIGTERM, stop_handler);
-  signal(SIGINT, stop_handler);
-  signal(SIGUSR1, day_change_handler);
+  struct sigaction sa;
+  memset(&sa, 0, sizeof(sa));
+  sa.sa_handler = stop_handler;
+  sigaction(SIGTERM, &sa, NULL);
+  sigaction(SIGINT, &sa, NULL);
+
+  struct sigaction sa_usr;
+  memset(&sa_usr, 0, sizeof(sa_usr));
+  sa_usr.sa_handler = day_change_handler;
+  sigaction(SIGUSR1, &sa_usr, NULL);
 
   srand((unsigned int)time(NULL) ^ (unsigned int)getpid());
 
