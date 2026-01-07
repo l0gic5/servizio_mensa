@@ -76,6 +76,7 @@ typedef struct config {
   int max_pauses_per_day;        // MAX_PAUSES_PER_DAY
   int pause_duration_ns;         // PAUSE_DURATION_NS
   int pause_probability_percent; // PAUSE_PROBABILITY_PERCENT
+  int day_end_barrier_wait_sec;  // DAY_END_BARRIER_WAIT_SEC
 
   ////////////////////////////////////////////
   //  6) COMPORTAMENTO E PREFERENZE UTENTI  //

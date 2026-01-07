@@ -30,11 +30,6 @@
 #define PATH_CASSA "./bin/cassa"
 #define PATH_UTENTE "./bin/utente"
 
-// Timeout (secondi) massimo per ogni "tick" di barriera a fine giornata.
-// Se qualche processo non segnala, il Responsabile non deve bloccarsi
-// indefinitamente.
-#define DAY_END_BARRIER_WAIT_SEC 5
-
 static int g_sem_id = -1;
 static int g_msg_id = -1;
 static int g_shm_roles_id = -1;
@@ -613,7 +608,7 @@ void handle_day_end_sync() {
   // barrier wait (sincronizzazione fine giornata)
   for (int i = 0; i < active_children; i++) {
     struct sembuf sb = {SEM_INDEX_BARRIER, -1, 0};
-    struct timespec timeout = {DAY_END_BARRIER_WAIT_SEC, 0};
+    struct timespec timeout = {g_config.day_end_barrier_wait_sec, 0};
 
     if (semtimedop(g_sem_id, &sb, 1, &timeout) == -1) {
 

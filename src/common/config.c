@@ -155,7 +155,10 @@ static void apply_config_parameter(Config *config, const char *key,
     config->pause_duration_ns = atoi(value);
   } else if (strcmp(key, "PAUSE_PROBABILITY_PERCENT") == 0) {
     config->pause_probability_percent = atoi(value);
+  } else if (strcmp(key, "DAY_END_BARRIER_WAIT_SEC") == 0) {
+    config->day_end_barrier_wait_sec = atoi(value);
   }
+
   ////////////////////////////////////////////
   //  6) COMPORTAMENTO E PREFERENZE UTENTI  //
   ////////////////////////////////////////////
@@ -333,6 +336,9 @@ static void set_default_values(Config *config) {
   }
   if (config->pause_probability_percent == 0) {
     config->pause_probability_percent = 10;
+  }
+  if (config->day_end_barrier_wait_sec == 0) {
+    config->day_end_barrier_wait_sec = 30;
   }
 
   ////////////////////////////////////////////
