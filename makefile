@@ -22,6 +22,10 @@ PROCESS_SRCS = $(wildcard $(SRC_DIR)/processes/*.c)
 PROCESS_OBJS = $(patsubst $(SRC_DIR)/processes/%.c, $(BUILD_DIR)/processes/%.o, $(PROCESS_SRCS))
 PROCESS_BINS = $(patsubst $(SRC_DIR)/processes/%.c, $(BIN_DIR)/%, $(PROCESS_SRCS))
 
+EXECUTABLES_SRCS = $(wildcard $(SRC_DIR)/executables/*.c)
+EXECUTABLES_OBJS = $(patsubst $(SRC_DIR)/executables/%.c, $(BUILD_DIR)/executables/%.o, $(EXECUTABLES_SRCS))
+EXECUTABLES_BINS = $(patsubst $(SRC_DIR)/executables/%.c, $(BIN_DIR)/%, $(EXECUTABLES_SRCS))
+
 TEST_SRCS = $(wildcard $(TEST_DIR)/*.c)
 TEST_OBJS = $(patsubst $(TEST_DIR)/%.c, $(BUILD_DIR)/test/%.o, $(TEST_SRCS))
 TEST_BINS = $(patsubst $(TEST_DIR)/%.c, $(BIN_DIR)/%, $(TEST_SRCS))
@@ -32,11 +36,16 @@ DOXYFILE = Doxyfile
 
 .PHONY: all test clean docs
 
-all: $(PROCESS_BINS) $(TEST_BINS)
+all: $(PROCESS_BINS) $(EXECUTABLES_BINS) $(TEST_BINS)
 
 $(PROCESS_BINS): $(BIN_DIR)/%: $(BUILD_DIR)/processes/%.o $(COMMON_OBJS)
 	@mkdir -p $(BIN_DIR)
 	@echo "Linking Process: $@"
+	$(CC) $(CFLAGS) $^ -o $@ -lm
+
+$(EXECUTABLES_BINS): $(BIN_DIR)/%: $(BUILD_DIR)/executables/%.o $(COMMON_OBJS)
+	@mkdir -p $(BIN_DIR)
+	@echo "Linking Executables tools: $@"
 	$(CC) $(CFLAGS) $^ -o $@ -lm
 
 $(TEST_BINS): $(BIN_DIR)/%: $(BUILD_DIR)/test/%.o $(COMMON_OBJS) $(UNITY_OBJ)
@@ -49,6 +58,10 @@ $(BUILD_DIR)/common/%.o: $(SRC_DIR)/common/%.c
 	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
 
 $(BUILD_DIR)/processes/%.o: $(SRC_DIR)/processes/%.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
+
+$(BUILD_DIR)/executables/%.o: $(SRC_DIR)/executables/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
 

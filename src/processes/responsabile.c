@@ -327,6 +327,11 @@ void start_all_processes(const char *config_path) {
     g_child_pids[pid_index++] = spawn_process(PATH_UTENTE, args_utente);
   }
 
+  sem_wait(g_sem_id, SEM_INDEX_MUTEX_STATS);
+  g_worker_config->total_workers_count = g_config.nof_workers;
+  g_worker_config->active_primi = w_primi;
+  sem_signal(g_sem_id, SEM_INDEX_MUTEX_STATS);
+
   sleep((unsigned int)g_config.system_startup_delay_sec);
 
   LOG_INFO("RESPONSABILE", "Processi avviati: %d", pid_index);

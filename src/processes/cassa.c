@@ -23,10 +23,12 @@
 #include "common/types.h"
 
 static int g_shm_stats_id = -1;
+static int g_shm_roles_id = -1;
 static int g_msg_id = -1;
 static int g_sem_id = -1;
 
 static GlobalStats *g_stats = NULL;
+static WorkerConfig *g_worker_config = NULL;
 
 static volatile sig_atomic_t g_running = 1;
 static volatile sig_atomic_t g_day_signal = 0;
@@ -56,6 +58,9 @@ void cleanup_resources(void) {
   if (g_stats) {
     detach_shm(g_stats);
   }
+  if (g_worker_config) {
+    detach_shm(g_worker_config);
+  }
   LOG_INFO("CASSA", "Chiusura modulo cassa.");
 }
 
@@ -70,6 +75,15 @@ int setup_ipc(void) {
   }
   g_stats = (GlobalStats *)attach_shm(g_shm_stats_id);
   if (g_stats == NULL) {
+    return -1;
+  }
+
+  g_shm_roles_id = allocate_shm(sizeof(WorkerConfig), FTOK_SHM_ROLES_ID);
+  if (g_shm_roles_id == -1) {
+    return -1;
+  }
+  g_worker_config = (WorkerConfig *)attach_shm(g_shm_roles_id);
+  if (g_worker_config == NULL) {
     return -1;
   }
 
@@ -106,6 +120,7 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "Usage: %s <id> <config_path>\n", argv[0]);
     exit(EXIT_FAILURE);
   }
+  int my_id = atoi(argv[1]);
 
   Config config;
   if (parse_config(argv[2], &config) == -1) {
@@ -122,6 +137,19 @@ int main(int argc, char *argv[]) {
 
   bool queue_error = false;
   while (g_running && !queue_error) {
+    time_t now = time(NULL);
+    if (g_worker_config->strike_end_times[my_id] > now) {
+      double duration = difftime(g_worker_config->strike_end_times[my_id], now);
+
+      LOG_WARN("CASSA", "SCIOPERO! Cassa chiusa per %.0f s.", duration);
+
+      struct timespec req = {(time_t)duration, 0};
+
+      nanosleep(&req, NULL);
+
+      LOG_INFO("CASSA", "Riapertura cassa.");
+    }
+
     // SE arriva segnale di fine giornata, segnalo la barriera anche
     // nel caso in cui la coda non sia mai vuota
     // (msgrcv non blocca => niente EINTR).

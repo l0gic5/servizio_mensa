@@ -32,9 +32,12 @@
 #define TOTAL_SEMS 12
 #define MAX_WORKERS 100
 
-typedef struct {
+typedef struct worker_config {
   // indice worker -> enum OpType
   int worker_roles[MAX_WORKERS];
+  int total_workers_count;
+
+  volatile time_t strike_end_times[MAX_WORKERS];
 
   int active_primi;
   int active_secondi;
@@ -52,7 +55,7 @@ typedef struct kitchen_state {
   int remaining_caffe;
 } KitchenState;
 
-typedef struct {
+typedef struct global_stats {
   int total_users_served;
   int total_users_refused;
 
@@ -71,7 +74,7 @@ typedef struct {
   int total_transactions;
 } GlobalStats;
 
-typedef struct {
+typedef struct daily_report {
   int day_number;
 
   // delta (oggi - ieri)

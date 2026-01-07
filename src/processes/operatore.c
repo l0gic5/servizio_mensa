@@ -348,11 +348,33 @@ void attempt_pause(int sem_id, int sem_workstation_index, int *pauses_done,
  * @param config Configurazione globale.
  */
 void service_cycle(int msg_id, int sem_id, int sem_index, long avg_time,
-                   int msg_type, int range_p, OpType role, Config config) {
+                   int msg_type, int range_p, OpType role, Config config,
+                   int my_id) {
   int pauses_done = 0;
 
   bool ended = false;
   while (!g_day_ended && !ended) {
+    time_t now = time(NULL);
+    time_t strike_end = g_worker_config->strike_end_times[my_id];
+
+    if (strike_end > now) {
+      double sleep_seconds = difftime(strike_end, now);
+
+      LOG_WARN("OPERATORE", "SCIOPERO! Mi fermo per %.0f secondi.",
+               sleep_seconds);
+
+      struct timespec req = {(time_t)sleep_seconds, 0};
+      struct timespec rem = {0, 0};
+
+      if (nanosleep(&req, &rem) == -1 && errno == EINTR) {
+        if (g_day_ended) {
+          break;
+        }
+      }
+
+      LOG_INFO("OPERATORE", "Sciopero terminato. Torno al lavoro.");
+    }
+
     MessageRequest req;
 
     int res = receive_message(msg_id, &req, REQ_PAYLOAD_SIZE, msg_type, 0);
@@ -477,7 +499,7 @@ int main(int argc, char *argv[]) {
 
     bool acquired = false;
 
-    // loop di attesa | continua se: 
+    // loop di attesa | continua se:
     //   - non acquisisce
     //   - non c'è errore critico
     //   - la giornata non è finita
@@ -508,7 +530,7 @@ int main(int argc, char *argv[]) {
       LOG_INFO("OPERATORE", "Workstation acquisita. Inizio servizio.");
 
       service_cycle(g_msg_id, g_sem_id, sem_workstation_index, avg_service_time,
-                    msg_type_req, range_percent, my_role, config);
+                    msg_type_req, range_percent, my_role, config, my_id);
 
       // rilascio postazione
       sem_signal(g_sem_id, sem_workstation_index);
