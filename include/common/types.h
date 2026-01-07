@@ -56,6 +56,7 @@ typedef struct {
   int total_plates_caffe;
 
   double total_revenue;
+  int total_transactions;
 } GlobalStats;
 
 typedef struct {

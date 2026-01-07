@@ -36,6 +36,7 @@ static GlobalStats *g_stats = NULL;
 static KitchenState *g_kitchen = NULL;
 static WorkerConfig *g_worker_config = NULL;
 
+static volatile sig_atomic_t g_running = 1;
 /// Flag volatile per indicare la fine della giornata lavorativa (impostato da
 /// signal handler)
 static volatile sig_atomic_t g_day_ended = 0;
@@ -47,8 +48,7 @@ static volatile sig_atomic_t g_day_ended = 0;
  *
  * @param sig Il numero del segnale ricevuto.
  */
-void cleanup(int sig) {
-  (void)sig;
+void cleanup_resources(void) {
   if (g_stats) {
     detach_shm(g_stats);
   }
@@ -61,6 +61,15 @@ void cleanup(int sig) {
 
   LOG_INFO("OPERATORE", "Chiusura operatore...");
   exit(0);
+}
+
+/**
+ * @brief Gestore segnali di terminazione (SIGTERM, SIGINT).
+ * Si limita a settare il flag, niente printf o exit qui.
+ */
+void stop_handler(int sig) {
+  (void)sig;
+  g_running = 0;
 }
 
 /**
@@ -269,13 +278,13 @@ void service_cycle(int msg_id, int sem_id, int sem_index, long avg_time,
 
       // aggiornamento statistiche
       sem_wait(sem_id, SEM_INDEX_MUTEX_STATS);
-      g_stats->total_users_served++;
 
       switch (role) {
       case OP_PRIMI:
         if (g_kitchen->remaining_primi > 0) {
           g_kitchen->remaining_primi--;
           g_stats->total_plates_primi++;
+          g_stats->total_users_served++;
           order_status = ORDER_SUCCESS;
         }
         break;
@@ -283,6 +292,7 @@ void service_cycle(int msg_id, int sem_id, int sem_index, long avg_time,
         if (g_kitchen->remaining_secondi > 0) {
           g_kitchen->remaining_secondi--;
           g_stats->total_plates_secondi++;
+          g_stats->total_users_served++;
           order_status = ORDER_SUCCESS;
         }
         break;
@@ -290,19 +300,17 @@ void service_cycle(int msg_id, int sem_id, int sem_index, long avg_time,
         if (g_kitchen->remaining_caffe > 0) {
           g_kitchen->remaining_caffe--;
           g_stats->total_plates_caffe++;
+          g_stats->total_users_served++;
           order_status = ORDER_SUCCESS;
         }
         break;
       case OP_CASSA:
         g_stats->total_revenue += req.total_cost;
+        g_stats->total_transactions++;
         order_status = ORDER_SUCCESS;
         break;
       default:
         break;
-      }
-
-      if (order_status == ORDER_SUCCESS && role != OP_CASSA) {
-        g_stats->total_users_served++;
       }
 
       sem_signal(sem_id, SEM_INDEX_MUTEX_STATS);
@@ -329,9 +337,17 @@ void service_cycle(int msg_id, int sem_id, int sem_index, long avg_time,
 }
 
 int main(int argc, char *argv[]) {
-  signal(SIGTERM, cleanup);
-  signal(SIGINT, cleanup);
-  signal(SIGUSR1, handle_day_end);
+  struct sigaction sa;
+  memset(&sa, 0, sizeof(sa));
+  sa.sa_handler = stop_handler;
+  sigaction(SIGTERM, &sa, NULL);
+  sigaction(SIGINT, &sa, NULL);
+
+  struct sigaction sa_day;
+  memset(&sa_day, 0, sizeof(sa_day));
+  sa_day.sa_handler = handle_day_end;
+  sigaction(SIGUSR1, &sa_day, NULL);
+
   srand((unsigned int)time(NULL) ^ (unsigned int)getpid());
 
   if (argc < 3) {
@@ -376,12 +392,22 @@ int main(int argc, char *argv[]) {
     LOG_INFO("OPERATORE", "Giorno %d: In coda per workstation ruolo %s...", day,
              ROLE_NAME(my_role));
 
-    if (sem_wait(g_sem_id, sem_workstation_index) == -1) {
-      if (errno == EINTR) {
+    bool acquired = false;
+    while (g_running) {
+      if (sem_wait(g_sem_id, sem_workstation_index) == 0) {
+        acquired = true;
         break;
       }
-      exit(EXIT_FAILURE);
+      if (errno != EINTR) {
+        LOG_ERR("OPERATORE", "Errore sem_wait workstation");
+        g_running = 0;
+        break;
+      }
+      // se EINTR, loop ricontrolla g_running
     }
+
+    if (!g_running)
+      break;
 
     LOG_INFO("OPERATORE", "Workstation acquisita. Inizio servizio.");
 
@@ -391,12 +417,16 @@ int main(int argc, char *argv[]) {
 
     // 3) fine giornata
     // reset flag per il giorno successivo
-    g_day_ended = 0;
-    sem_signal(g_sem_id, sem_workstation_index);
+    g_day_ended = 0; // Reset per domani
+    if (acquired) {
+      sem_signal(g_sem_id, sem_workstation_index);
+    }
 
-    LOG_INFO("OPERATORE", "Giorno %d terminato.", day);
+    if (g_running) {
+      LOG_INFO("OPERATORE", "Giorno %d terminato.", day);
+    }
   }
 
-  cleanup(0);
+  cleanup_resources();
   return 0;
 }

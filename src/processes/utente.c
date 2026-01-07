@@ -44,7 +44,6 @@ void stop_handler(int sig) {
  */
 void day_change_handler(int sig) { (void)sig; }
 
-
 /**
  * @brief Inizializza IPC collegandosi alle risorse esistenti
  */
@@ -352,21 +351,28 @@ int main(int argc, char *argv[]) {
        day++) {
     // ritardo casuale arrivo utente
     if (config.user_max_arrival_delay_us > 0) {
-      usleep((unsigned int)random_range(0, config.user_max_arrival_delay_us,
-                                        rand));
+      struct timespec ts = {
+          0,
+          (long)random_range(0, config.user_max_arrival_delay_us, rand) * 1000};
+      if (nanosleep(&ts, NULL) == -1 && !g_running) {
+        break;
+      }
     }
 
     double daily_salary = random_range(config.user_min_daily_salary,
                                        config.user_max_daily_salary, rand);
-
     my_budget += daily_salary;
 
     LOG_INFO("UTENTE", "Giorno %d: Ricevuto stipendio %.2f€. Totale: %.2f€",
              day, daily_salary, my_budget);
 
     if (config.user_max_arrival_delay_us > 0) {
-      usleep((unsigned int)random_range(0, config.user_max_arrival_delay_us,
-                                        rand));
+      struct timespec ts = {
+          0,
+          (long)random_range(0, config.user_max_arrival_delay_us, rand) * 1000};
+      if (nanosleep(&ts, NULL) == -1 && !g_running) {
+        break;
+      }
     }
 
     user_routine(&config, &my_budget);
@@ -376,7 +382,11 @@ int main(int argc, char *argv[]) {
 
     // attende il segnale SIGUSR1 dal Responsabile
     // pause() ritorna -1 con errno=EINTR quando arriva un segnale gestito
-    pause();
+    if (g_running) {
+      LOG_INFO("UTENTE",
+               "Finito il pasto, attendo chiusura mensa (Giorno %d)...", day);
+      pause();
+    }
 
     // Quando arriva SIGUSR1, handle_day_end viene chiamato (vuoto o flag),
     // pause() si sblocca e il ciclo ricomincia.

@@ -48,9 +48,8 @@ static volatile sig_atomic_t g_shutdown = 0;
  * @brief Funzione di pulizia risorse (chiamata a fine main o signal handler)
  */
 void cleanup_resources(void) {
-  LOG_INFO("RESPONSABILE", "Avvio procedura di cleanup...");
+  LOG_INFO("RESPONSABILE", "Avvio procedura di cleanup (inviato SIGTERM)...");
 
-  // SIGTERM a tutti i figli
   if (g_child_pids) {
     for (int i = 0; i < g_total_children; i++) {
       if (g_child_pids[i] > 0) {
@@ -58,14 +57,26 @@ void cleanup_resources(void) {
       }
     }
 
-    // evita zombie
+    sleep(1);
+
+    for (int i = 0; i < g_total_children; i++) {
+      if (g_child_pids[i] > 0) {
+        int status;
+        int res = waitpid(g_child_pids[i], &status, WNOHANG);
+
+        if (res == 0) {
+          kill(g_child_pids[i], SIGKILL);
+        }
+      }
+    }
+
     while (wait(NULL) > 0) {
     }
 
     free(g_child_pids);
   }
 
-  // risorse IPC
+  // rimozione risorse IPC
   if (g_sem_id != -1) {
     remove_sem_set(g_sem_id);
   }
@@ -81,6 +92,7 @@ void cleanup_resources(void) {
   if (g_shm_roles_id != -1) {
     remove_shm(g_shm_roles_id);
   }
+
   LOG_INFO("RESPONSABILE", "Cleanup completato. Terminazione.");
 }
 
@@ -309,7 +321,8 @@ void start_all_processes(const char *config_path) {
 void print_daily_stats(DailyReport *report, GlobalStats *total_stats) {
   sem_wait(g_sem_id, SEM_INDEX_OUTPUT);
 
-  printf("\n" COLOR_BLUE "======== REPORT GIORNO %d =========" COLOR_RESET "\n",
+  printf("\n" COLOR_BLUE "========== REPORT GIORNO %d ==========" COLOR_RESET
+         "\n",
          report->day_number);
   printf("Utenti Serviti:   %d\n", report->daily_users_served);
   printf("Utenti Respinti:  %d\n", report->daily_users_refused);
@@ -325,7 +338,7 @@ void print_daily_stats(DailyReport *report, GlobalStats *total_stats) {
   printf("Totale Serviti:   %d\n", total_stats->total_users_served);
   printf("Totale Ricavi:    %.2f€\n", total_stats->total_revenue);
 
-  printf(COLOR_BLUE "=================================" COLOR_RESET "\n\n");
+  printf(COLOR_BLUE "====================================" COLOR_RESET "\n\n");
 
   sem_signal(g_sem_id, SEM_INDEX_OUTPUT);
 }
@@ -344,6 +357,7 @@ void print_final_stats() {
   printf("Piatti Distribuiti:\n  - Primi: %d\n  - Secondi: %d\n  - Caffè: %d\n",
          g_stats->total_plates_primi, g_stats->total_plates_secondi,
          g_stats->total_plates_caffe);
+  printf("Transazioni Totali: %d\n", g_stats->total_transactions);
   printf("Ricavo Totale: %.2f€\n", g_stats->total_revenue);
   printf(COLOR_BLUE "================================" COLOR_RESET "\n\n");
 
@@ -363,26 +377,34 @@ void perform_periodic_refill() {
     return;
   }
 
+  bool refilled = false;
+
   // rifornimento PRIMI
   int current_primi = g_kitchen->remaining_primi;
   int to_add_primi = g_config.avg_refill_primi;
   if (current_primi < g_config.max_porzioni_primi) {
-    int new_qty = current_primi + to_add_primi;
-    if (new_qty > g_config.max_porzioni_primi) {
-      new_qty = g_config.max_porzioni_primi;
+    int new_quantity = current_primi + to_add_primi;
+
+    if (new_quantity > g_config.max_porzioni_primi) {
+      new_quantity = g_config.max_porzioni_primi;
     }
-    g_kitchen->remaining_primi = new_qty;
+
+    g_kitchen->remaining_primi = new_quantity;
+    refilled = true;
   }
 
   // rifornimento SECONDI
   int current_secondi = g_kitchen->remaining_secondi;
   int to_add_secondi = g_config.avg_refill_secondi;
   if (current_secondi < g_config.max_porzioni_secondi) {
-    int new_qty = current_secondi + to_add_secondi;
-    if (new_qty > g_config.max_porzioni_secondi) {
-      new_qty = g_config.max_porzioni_secondi;
+    int new_quantity = current_secondi + to_add_secondi;
+
+    if (new_quantity > g_config.max_porzioni_secondi) {
+      new_quantity = g_config.max_porzioni_secondi;
     }
-    g_kitchen->remaining_secondi = new_qty;
+
+    g_kitchen->remaining_secondi = new_quantity;
+    refilled = true;
   }
 
   // rifornimento CAFFÈ => (max_porzioni_caffe - remaining_caffe) == caffè
@@ -390,21 +412,33 @@ void perform_periodic_refill() {
   int current_caffe = g_kitchen->remaining_caffe;
   int to_add_caffe = g_config.max_porzioni_caffe - g_kitchen->remaining_caffe;
   if (current_caffe < g_config.max_porzioni_caffe) {
-    int new_qty = current_caffe + to_add_caffe;
-    if (new_qty > g_config.max_porzioni_caffe) {
-      new_qty = g_config.max_porzioni_caffe;
+    int new_quantity = current_caffe + to_add_caffe;
+
+    if (new_quantity > g_config.max_porzioni_caffe) {
+      new_quantity = g_config.max_porzioni_caffe;
     }
-    g_kitchen->remaining_caffe = new_qty;
+
+    g_kitchen->remaining_caffe = new_quantity;
+    refilled = true;
   }
 
   // rilascio MUTEX
   sem_signal(g_sem_id, SEM_INDEX_MUTEX_STATS);
 
-  LOG_INFO("RESPONSABILE",
-           "Refill eseguito. Stato cucina:\n  - %d Primi\n  - %d Secondi\n  - "
-           "%d Caffè",
-           g_kitchen->remaining_primi, g_kitchen->remaining_secondi,
-           g_kitchen->remaining_caffe);
+  // LOG_INFO("RESPONSABILE",
+  //          "Refill eseguito. Stato cucina:\n  - %d Primi\n  - %d Secondi\n  -
+  //          "
+  //          "%d Caffè",
+  //          g_kitchen->remaining_primi, g_kitchen->remaining_secondi,
+  //          g_kitchen->remaining_caffe);
+
+  if (refilled) {
+    LOG_INFO("RESPONSABILE", "Refill periodico (%d min) eseguito.",
+             g_config.refill_interval_minutes);
+  }
+  // else {
+  //   LOG_INFO("RESPONSABILE", "Refill non necessario (cucina piena).");
+  // }
 }
 
 /**
@@ -506,6 +540,7 @@ void run_simulation_loop(const char *config_path) {
 
       nanosleep(&ts_rem, NULL);
     }
+
     if (g_shutdown) {
       break;
     }
@@ -588,14 +623,13 @@ int main(int argc, char *argv[]) {
     exit(EXIT_FAILURE);
   }
 
-  // non necessario perché per ora non è memoria competitiva
+  // MUTEX non necessario perché per ora non è memoria competitiva
   // sem_wait(g_sem_id, SEM_INDEX_MUTEX_STATS);
 
   g_kitchen->remaining_primi = g_config.max_porzioni_primi;
   g_kitchen->remaining_secondi = g_config.max_porzioni_secondi;
   g_kitchen->remaining_caffe = g_config.max_porzioni_caffe;
 
-  // non necessario perché per ora non è memoria competitiva
   // sem_signal(g_sem_id, SEM_INDEX_MUTEX_STATS);
 
   LOG_INFO(
@@ -608,7 +642,6 @@ int main(int argc, char *argv[]) {
   run_simulation_loop(config_path);
 
   print_final_stats();
-
   cleanup_resources();
 
   return 0;
