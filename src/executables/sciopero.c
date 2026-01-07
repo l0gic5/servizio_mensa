@@ -19,6 +19,12 @@ int main(int argc, char *argv[]) {
   (void)argc;
   (void)argv;
 
+  Config config;
+  if (parse_config(argv[2], &config) == -1) {
+    printf(COLOR_RED "Errore parsing config\n" COLOR_RESET);
+    exit(EXIT_FAILURE);
+  }
+
   int shm_id = allocate_shm(sizeof(WorkerConfig), FTOK_SHM_ROLES_ID);
   if (shm_id == -1) {
     printf(COLOR_RED "Errore: Impossibile collegarsi alla SHM. Sistema non "
@@ -59,8 +65,9 @@ int main(int argc, char *argv[]) {
   printf("--------------------------------------------------\n");
 
   printf("\n" COLOR_RED "=== MENU SCIOPERO ===" COLOR_RESET "\n");
-  printf(" * Inserisci gli ID degli operatori da mandare in sciopero (separati da "
-         "spazio).\n");
+  printf(
+      " * Inserisci gli ID degli operatori da mandare in sciopero (separati da "
+      "spazio).\n");
   printf("   Esempio: 0 2 3\n");
   printf("> ");
 
@@ -85,10 +92,12 @@ int main(int argc, char *argv[]) {
     return 0;
   }
 
-  printf(" * Inserisci la durata dello sciopero in secondi:\n> ");
+  printf(" * Inserisci la durata dello sciopero in secondi (%d):\n> ",
+         config.default_sciopero_stop_duration);
   int duration = 0;
-  if (scanf("%d", &duration) != 1 || duration <= 0)
-    duration = 5;
+  if (scanf("%d", &duration) != 1 || duration <= 0) {
+    duration = config.default_sciopero_stop_duration;
+  }
 
   time_t end_time = time(NULL) + duration;
 

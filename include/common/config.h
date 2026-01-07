@@ -103,12 +103,16 @@ typedef struct config {
   ///////////////////////////////////
 
   int refill_interval_minutes; // REFILL_INTERVAL_MINUTES
-  int avg_refill_primi;     // AVG_REFILL_PRIMI
-  int avg_refill_secondi;   // AVG_REFILL_SECONDI
-  int max_porzioni_primi;   // MAX_PORZIONI_PRIMI
-  int max_porzioni_secondi; // MAX_PORZIONI_SECONDI
-  int max_porzioni_caffe;   // MAX_PORZIONI_CAFFE
+  int avg_refill_primi;        // AVG_REFILL_PRIMI
+  int avg_refill_secondi;      // AVG_REFILL_SECONDI
+  int max_porzioni_primi;      // MAX_PORZIONI_PRIMI
+  int max_porzioni_secondi;    // MAX_PORZIONI_SECONDI
+  int max_porzioni_caffe;      // MAX_PORZIONI_CAFFE
 
+  ////////////////
+  //  8) TOOLS  //
+  ////////////////
+  int default_sciopero_stop_duration; // DEFAULT_SCIOPERO_STOP_DURATION
 } Config;
 
 /**

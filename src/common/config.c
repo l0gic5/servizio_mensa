@@ -209,6 +209,14 @@ static void apply_config_parameter(Config *config, const char *key,
     config->max_porzioni_caffe = atoi(value);
   }
 
+  ////////////////
+  //  8) TOOLS  //
+  ////////////////
+
+  else if (strcmp(key, "DEFAULT_SCIOPERO_STOP_DURATION") == 0) {
+    config->default_sciopero_stop_duration = atoi(value);
+  }
+
   else {
     LOG_WARN("CONFIG", "Chiave sconosciuta riga %d: %s", line_num, key);
   }
@@ -403,6 +411,14 @@ static void set_default_values(Config *config) {
   }
   if (config->max_porzioni_caffe == 0) {
     config->max_porzioni_caffe = 1000;
+  }
+
+  ////////////////
+  //  8) TOOLS  //
+  ////////////////
+
+  if (config->default_sciopero_stop_duration == 0) {
+    config->default_sciopero_stop_duration = 60;
   }
 }
 
