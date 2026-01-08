@@ -139,11 +139,11 @@ static void apply_config_parameter(Config *config, const char *key,
   }
   // prezzi
   else if (strcmp(key, "PRICE_PRIMI") == 0) {
-    config->price_primi = atoi(value);
+    config->price_primi = atof(value);
   } else if (strcmp(key, "PRICE_SECONDI") == 0) {
-    config->price_secondi = atoi(value);
+    config->price_secondi = atof(value);
   } else if (strcmp(key, "PRICE_CAFFE") == 0) {
-    config->price_caffe = atoi(value);
+    config->price_caffe = atof(value);
   } else if (strcmp(key, "TICKET_DISCOUNT_PERCENT") == 0) {
     config->ticket_discount_percent = atof(value);
   }
@@ -252,7 +252,7 @@ static void apply_config_parameter(Config *config, const char *key,
  */
 static void set_default_values(Config *config) {
   // 1) SIMULAZIONE GLOBALE
-  config->simulation_duration_days = 15;
+  config->simulation_duration_days = 30;
   config->n_nanosecs_as_minute = 100000000;
   config->daily_service_minutes = 120;
   config->system_startup_delay_sec = 2;
@@ -271,7 +271,7 @@ static void set_default_values(Config *config) {
   config->queue_capacity_cassa = 20;
 
   config->ticket_reader_capacity = 4;
-  config->ticket_reader_timeout_ns = 750000000;
+  config->ticket_reader_timeout_ns = 5000000;
 
   config->workstations_primi = 2;
   config->workstations_secondi = 2;
@@ -304,7 +304,7 @@ static void set_default_values(Config *config) {
   config->user_queue_timeout_sec = 5;
   config->user_meal_duration_ns = 2000000000;
   config->user_coffee_duration_ns = 10000000;
-  config->user_max_arrival_delay_us = 10000000;
+  config->user_max_arrival_delay_us = 9600000;
 
   config->probability_user_wants_primo = 60;
   config->probability_user_wants_secondo = 70;
@@ -317,8 +317,8 @@ static void set_default_values(Config *config) {
 
   // 7) LOGISTICA
   config->refill_interval_minutes = 10;
-  config->avg_refill_primi = 40;
-  config->avg_refill_secondi = 40;
+  config->avg_refill_primi = 20;
+  config->avg_refill_secondi = 20;
 
   config->max_porzioni_primi = 50;
   config->max_porzioni_secondi = 50;
@@ -335,7 +335,7 @@ static void set_default_values(Config *config) {
   strncpy(config->daily_reports_filename_csv, "days/daily_report",
           sizeof(config->daily_reports_filename_csv) - 1);
 
-  config->export_final_stats_csv = false;
+  config->export_final_stats_csv = true;
   strncpy(config->final_stats_filename_csv, "final_stats",
           sizeof(config->final_stats_filename_csv) - 1);
 }

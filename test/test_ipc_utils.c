@@ -174,6 +174,11 @@ static void test_multiple_shm_separation(void) {
   remove_shm(shm2);
 }
 
+static void test_detach_shm_null(void) {
+  int res = detach_shm(NULL);
+  TEST_ASSERT_EQUAL_INT(0, res);
+}
+
 ///////////////////////
 //  SEMAPHORE TESTS  //
 ///////////////////////
@@ -181,6 +186,15 @@ static void test_multiple_shm_separation(void) {
 static void test_sem_set_creation(void) {
   g_sem_id = create_sem_set(2);
   TEST_ASSERT_NOT_EQUAL_INT(-1, g_sem_id);
+}
+
+static void test_init_sem_value(void) {
+  g_sem_id = create_sem_set(1);
+
+  init_sem(g_sem_id, 0, 5);
+
+  int val = semctl(g_sem_id, 0, GETVAL);
+  TEST_ASSERT_EQUAL_INT(5, val);
 }
 
 static void test_sem_logic(void) {
@@ -193,6 +207,24 @@ static void test_sem_logic(void) {
   TEST_ASSERT_EQUAL_INT(0, sem_signal(g_sem_id, 0));
   // 1 -> 0
   TEST_ASSERT_EQUAL_INT(0, sem_wait(g_sem_id, 0));
+}
+
+static void test_sem_recreation_on_size_mismatch(void) {
+  g_sem_id = create_sem_set(1);
+  TEST_ASSERT_NOT_EQUAL_INT(-1, g_sem_id);
+
+  int new_id = create_sem_set(5);
+
+  TEST_ASSERT_NOT_EQUAL_INT(-1, new_id);
+
+  struct semid_ds buf;
+  union semun arg;
+  arg.buf = &buf;
+  semctl(new_id, 0, IPC_STAT, arg);
+
+  TEST_ASSERT_EQUAL_INT(5, buf.sem_nsems);
+
+  g_sem_id = new_id;
 }
 
 ///////////////////////
@@ -229,6 +261,30 @@ static void test_msg_queue_nowait(void) {
       receive_message(g_msg_id, &rcv_buf, sizeof(rcv_buf.mtext), 1, IPC_NOWAIT);
   TEST_ASSERT_EQUAL_INT(-1, bytes);
   TEST_ASSERT_EQUAL_INT(ENOMSG, errno);
+}
+
+static void test_msg_queue_full_nowait(void) {
+  g_msg_id = create_msg_queue();
+
+  struct msqid_ds buf;
+  msgctl(g_msg_id, IPC_STAT, &buf);
+  // limit: 100 bytes
+  buf.msg_qbytes = 100;
+  msgctl(g_msg_id, IPC_SET, &buf);
+
+  struct test_msg_buf msg;
+  msg.mtype = 1;
+  // 60 bytes
+  memset(msg.mtext, 'A', 60);
+
+  // primo invio: OK (60 < 100)
+  int res = send_message(g_msg_id, &msg, 60, IPC_NOWAIT);
+  TEST_ASSERT_EQUAL_INT(0, res);
+
+  // secondo invio: FULL (60+60 > 100) => IPC_NOWAIT deve fallire
+  res = send_message(g_msg_id, &msg, 60, IPC_NOWAIT);
+  TEST_ASSERT_EQUAL_INT(-1, res);
+  TEST_ASSERT_EQUAL_INT(EAGAIN, errno);
 }
 
 //////////////////////////////
@@ -304,6 +360,52 @@ static void test_msg_queue_type_filtering(void) {
   TEST_ASSERT_EQUAL_INT(1, rcv.mtype);
 }
 
+static void test_sem_mutex_logic(void) {
+  // MUTEX = semaforo binario inizializzato a 1
+  g_sem_id = create_sem_set(1);
+  init_sem(g_sem_id, 0, 1);
+
+  sem_mutex_acquire(g_sem_id, 0);
+
+  // verifica che il semaforo sia a 0 (bloccato)
+  int val = semctl(g_sem_id, 0, GETVAL);
+  TEST_ASSERT_EQUAL_INT(0, val);
+
+  sem_mutex_release(g_sem_id, 0);
+
+  // verifica che il semaforo sia tornato a 1 (libero)
+  val = semctl(g_sem_id, 0, GETVAL);
+  TEST_ASSERT_EQUAL_INT(1, val);
+}
+
+static void test_sem_mutex_contention(void) {
+  g_sem_id = create_sem_set(1);
+  init_sem(g_sem_id, 0, 1);
+
+  pid_t pid = fork();
+  if (pid == 0) {
+    // FIGLIO
+    sem_mutex_acquire(g_sem_id, 0);
+    // 50ms
+    usleep(50000);
+    sem_mutex_release(g_sem_id, 0);
+    exit(0);
+  } else {
+    // PADRE
+    // 10ms
+    usleep(10000);
+
+    sem_mutex_acquire(g_sem_id, 0);
+
+    int status;
+    // pulisce lo zombie
+    waitpid(pid, &status, 0);
+
+    sem_mutex_release(g_sem_id, 0);
+    TEST_ASSERT_EQUAL_INT(0, WEXITSTATUS(status));
+  }
+}
+
 int main(void) {
   clean_stale_ipc_resources();
   UNITY_BEGIN();
@@ -314,16 +416,22 @@ int main(void) {
 
   RUN_TEST(test_shm_lifecycle);
   RUN_TEST(test_multiple_shm_separation);
+  RUN_TEST(test_detach_shm_null);
 
   RUN_TEST(test_sem_set_creation);
+  RUN_TEST(test_init_sem_value);
   RUN_TEST(test_sem_logic);
+  RUN_TEST(test_sem_recreation_on_size_mismatch);
 
   RUN_TEST(test_msg_queue_lifecycle);
   RUN_TEST(test_msg_queue_nowait);
+  RUN_TEST(test_msg_queue_full_nowait);
 
   RUN_TEST(test_shm_across_processes);
   RUN_TEST(test_sem_blocking_with_fork);
   RUN_TEST(test_msg_queue_type_filtering);
+  RUN_TEST(test_sem_mutex_logic);
+  RUN_TEST(test_sem_mutex_contention);
 
   return UNITY_END();
 }

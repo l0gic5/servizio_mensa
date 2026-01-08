@@ -2,6 +2,7 @@
 #define STATS_H
 
 #include "types.h"
+#include <stdbool.h>
 
 typedef struct global_stats {
   int total_users_served;
