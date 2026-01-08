@@ -697,9 +697,11 @@ void run_simulation_loop(const char *config_path, int *day) {
     KitchenState leftovers = *g_kitchen;
     sem_signal(g_sem_id, SEM_INDEX_MUTEX_STATS);
 
-    // calcolo delta
+    // calcolo delta per DailyReport
     report.daily_users_served =
         end.total_users_served - start_of_day_stats.total_users_served;
+    report.daily_users_w_ticket =
+        end.total_users_w_ticket - start_of_day_stats.total_users_w_ticket;
     report.daily_users_refused =
         end.total_users_refused - start_of_day_stats.total_users_refused;
     report.daily_plates_primi =

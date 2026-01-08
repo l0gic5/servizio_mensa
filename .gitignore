@@ -42,3 +42,6 @@ Desktop.ini
 *.pro.user
 *.tags
 compile_commands.json
+
+TODO.md
+reports/

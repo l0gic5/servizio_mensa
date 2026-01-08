@@ -6,6 +6,7 @@
 typedef struct global_stats {
   int total_users_served;
   int total_users_refused;
+  int total_users_w_ticket;
 
   // piatti distribuiti
   int total_plates_primi;
@@ -28,6 +29,7 @@ typedef struct daily_report {
   // delta (oggi - ieri)
   int daily_users_served;
   int daily_users_refused;
+  int daily_users_w_ticket;
 
   int daily_plates_primi;
   int daily_plates_secondi;
@@ -74,24 +76,25 @@ char *process_daily_report(DailyReport *report, GlobalStats *total_stats);
 char *process_final_report(GlobalStats *stats, int total_days);
 
 /**
- * @brief Crea un file CSV per il giorno corrente (es. report-day_1.csv).
+ * @brief Crea il file del giorno E appende la riga al report cumulativo.
  *
- * @param report Report giornaliero da esportare
- * @param folder_path Cartella di destinazione
- * @param filename_prefix Prefisso del nome file (es. "report")
+ * @param report Dati del giorno
+ * @param folder_path Cartella base
+ * @param day_file_prefix Prefisso file giorno (es. "days/daily_report")
+ * @param final_file_prefix Prefisso file finale per append (es. "final_stats")
  */
 void export_daily_stats_to_csv(DailyReport *report, const char *folder_path,
-                               const char *filename_prefix,
-                               const char *final_file_prefix_for_append);
+                               const char *day_file_prefix,
+                               const char *final_file_prefix);
 
 /**
- * @brief Esporta le statistiche finali in un file CSV.
+ * @brief Appende la riga globale al file finale.
  *
- * @param total_stats Statistiche globali finali
- * @param folder_path Cartella di destinazione
- * @param filename_prefix Prefisso del nome file (es. "final_stats")
+ * @param total_stats Dati globali
+ * @param folder_path Cartella base
+ * @param final_file_prefix Prefisso file finale
  */
-void export_final_stats_to_csv(GlobalStats *total_stats, int total_days,
+void export_final_stats_to_csv(GlobalStats *total_stats, const int total_days,
                                const char *folder_path,
-                               const char *filename_prefix);
+                               const char *final_file_prefix);
 #endif

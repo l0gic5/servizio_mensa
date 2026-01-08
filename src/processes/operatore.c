@@ -392,7 +392,6 @@ void service_cycle(int msg_id, int sem_id, int sem_index, long avg_time,
         if (g_kitchen->remaining_primi > 0) {
           g_kitchen->remaining_primi--;
           g_stats->total_plates_primi++;
-          g_stats->total_users_served++;
           order_status = ORDER_SUCCESS;
         }
         break;
@@ -400,7 +399,6 @@ void service_cycle(int msg_id, int sem_id, int sem_index, long avg_time,
         if (g_kitchen->remaining_secondi > 0) {
           g_kitchen->remaining_secondi--;
           g_stats->total_plates_secondi++;
-          g_stats->total_users_served++;
           order_status = ORDER_SUCCESS;
         }
         break;
@@ -408,7 +406,6 @@ void service_cycle(int msg_id, int sem_id, int sem_index, long avg_time,
         if (g_kitchen->remaining_caffe > 0) {
           g_kitchen->remaining_caffe--;
           g_stats->total_plates_caffe++;
-          g_stats->total_users_served++;
           order_status = ORDER_SUCCESS;
         }
         break;

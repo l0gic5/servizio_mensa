@@ -22,8 +22,8 @@
 #include "common/config.h"
 #include "common/ipc_utils.h"
 #include "common/logger.h"
-#include "common/types.h"
 #include "common/stats.h"
+#include "common/types.h"
 
 static int g_sem_id = -1;
 static int g_msg_id = -1;
@@ -93,11 +93,31 @@ void update_wait_stats(OpType type, double wait_time) {
 }
 
 /**
+ * @brief Segnala che l'utente è stato servito con successo.
+ */
+void mark_as_served() {
+  if (sem_wait(g_sem_id, SEM_INDEX_MUTEX_STATS) != -1) {
+    g_stats->total_users_served++;
+    sem_signal(g_sem_id, SEM_INDEX_MUTEX_STATS);
+  }
+}
+
+/**
  * @brief Segnala che l'utente è stato rifiutato (code piene).
  */
 void mark_as_refused() {
   if (sem_wait(g_sem_id, SEM_INDEX_MUTEX_STATS) != -1) {
     g_stats->total_users_refused++;
+    sem_signal(g_sem_id, SEM_INDEX_MUTEX_STATS);
+  }
+}
+
+/**
+ * @brief Segnala che l'utente ha un ticket.
+ */
+void mark_as_w_ticket() {
+  if (sem_wait(g_sem_id, SEM_INDEX_MUTEX_STATS) != -1) {
+    g_stats->total_users_w_ticket++;
     sem_signal(g_sem_id, SEM_INDEX_MUTEX_STATS);
   }
 }
@@ -158,16 +178,14 @@ int enter_queue(int sem_index, const char *queue_name, int timeout_sec) {
 
     // timeout scaduto (coda troppo lenta)
     if (errno == EAGAIN) {
-      LOG_WARN("UTENTE", "Coda %s troppo lenta! Rinuncio al piatto.",
+      LOG_WARN("UTENTE", "Coda %s troppo lenta! Rinuncio all'accesso.",
                queue_name);
-      mark_as_refused();
       return -1;
     }
 
     // interruzione segnale (fine giornata)
     if (errno == EINTR) {
       LOG_WARN("UTENTE", "Mensa chiusa mentre ero in coda %s!", queue_name);
-      mark_as_refused();
       return -1;
     }
 
@@ -223,7 +241,7 @@ int perform_order(OpType type, int msg_type, double amount, bool has_ticket) {
     // => logga solo se non è EINTR pulito
     if (errno != EINTR) {
       LOG_ERR("UTENTE", "Nessuna risposta da %s", ROLE_NAME(type));
-      mark_as_refused();
+      // mark_as_refused();
     }
     return -1;
   }
@@ -449,6 +467,7 @@ void user_routine(Config *cfg, double *current_budget, bool has_ticket) {
   }
 
   if (!got_primo && !got_secondo && !wants_caffe) {
+    mark_as_refused();
     LOG_INFO("UTENTE", "Oggi non mangio niente. Esco.");
     return;
   }
@@ -481,6 +500,11 @@ void user_routine(Config *cfg, double *current_budget, bool has_ticket) {
 
         update_wait_stats(OP_CASSA, get_current_time_sec() - start);
 
+        if (has_ticket) {
+          mark_as_w_ticket();
+        }
+        mark_as_served();
+
         char *log_msg = has_ticket ? "scontato ticket" : "prezzo intero";
 
         LOG_INFO("UTENTE", "Pagato %.2f€ [%s]", importo_effettivo, log_msg);
@@ -492,6 +516,7 @@ void user_routine(Config *cfg, double *current_budget, bool has_ticket) {
 
   // sciopero cassa o timeout
   if (!paid && conto_da_pagare > 0.001) {
+    mark_as_refused();
     LOG_WARN("UTENTE", "Impossibile pagare. Abbandono il vassoio ed esco.");
     return;
   }

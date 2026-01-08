@@ -248,256 +248,109 @@ static void apply_config_parameter(Config *config, const char *key,
  * @brief Sets default values for optional parameters.
  */
 static void set_default_values(Config *config) {
-  ///////////////////////////////////////////////
-  //  1) SIMULAZIONE GLOBALE (Tempo e Limiti)  //
-  ///////////////////////////////////////////////
+  // 1) SIMULAZIONE GLOBALE
+  config->simulation_duration_days = 15;
+  config->n_nanosecs_as_minute = 100000000;
+  config->daily_service_minutes = 120;
+  config->system_startup_delay_sec = 2;
+  config->overload_threshold = 50;
 
-  if (config->simulation_duration_days == 0) {
-    config->simulation_duration_days = 15;
-  }
-  if (config->n_nanosecs_as_minute == 0) {
-    config->n_nanosecs_as_minute = 100000000;
-  }
-  if (config->daily_service_minutes == 0) {
-    config->daily_service_minutes = 120;
-  }
-  if (config->system_startup_delay_sec == 0) {
-    config->system_startup_delay_sec = 2;
-  }
-  if (config->overload_threshold == 0) {
-    config->overload_threshold = 50;
-  }
+  // 2) POPOLAZIONE
+  config->nof_users = 50;
+  config->nof_workers = 6;
+  config->nof_table_seats = 40;
+  config->avg_user_w_ticket = 80;
 
-  ////////////////////////////////////////
-  //  2) POPOLAZIONE E RISORSE FISICHE  //
-  ////////////////////////////////////////
-  if (config->nof_users == 0) {
-    config->nof_users = 50;
-  }
-  if (config->nof_workers == 0) {
-    config->nof_workers = 6;
-  }
-  if (config->nof_table_seats == 0) {
-    config->nof_table_seats = 40;
-  }
-  if (config->avg_user_w_ticket == 0) {
-    config->avg_user_w_ticket = 80;
-  }
+  // 3) STAZIONI
+  config->queue_capacity_primi = 15;
+  config->queue_capacity_secondi = 15;
+  config->queue_capacity_caffe = 20;
+  config->queue_capacity_cassa = 20;
 
-  ///////////////////////////////////////////////////
-  //  3) CONFIGURAZIONE STAZIONI (Code e Banconi)  //
-  ///////////////////////////////////////////////////
+  config->ticket_reader_capacity = 4;
+  config->ticket_reader_timeout_ns = 750000000;
 
-  // capacità code
-  if (config->queue_capacity_primi == 0) {
-    config->queue_capacity_primi = 15;
-  }
-  if (config->queue_capacity_secondi == 0) {
-    config->queue_capacity_secondi = 15;
-  }
-  if (config->queue_capacity_caffe == 0) {
-    config->queue_capacity_caffe = 20;
-  }
-  if (config->queue_capacity_cassa == 0) {
-    config->queue_capacity_cassa = 20;
-  }
+  config->workstations_primi = 2;
+  config->workstations_secondi = 2;
+  config->workstations_caffe = 2;
+  config->workstations_cassa = 1;
 
-  // tickets
-  if (config->ticket_reader_capacity == 0) {
-    config->ticket_reader_capacity = 4;
-  }
-  if (config->ticket_reader_timeout_ns == 0) {
-    config->ticket_reader_timeout_ns = 750000000;
-  }
+  // 4) METRICHE
+  config->avg_service_primi = 100000000;
+  config->avg_service_secondi = 120000000;
+  config->avg_service_caffe = 50000000;
+  config->avg_service_cassa = 60000000;
 
-  // postazioni fisiche
-  if (config->workstations_primi == 0) {
-    config->workstations_primi = 2;
-  }
-  if (config->workstations_secondi == 0) {
-    config->workstations_secondi = 2;
-  }
-  if (config->workstations_caffe == 0) {
-    config->workstations_caffe = 2;
-  }
-  if (config->workstations_cassa == 0) {
-    config->workstations_cassa = 1;
-  }
+  config->variability_primi = 30;
+  config->variability_secondi = 30;
+  config->variability_caffe = 20;
+  config->variability_cassa = 20;
 
-  ////////////////////////////////////////////////////////////
-  //  4) METRICHE DI SERVIZIO (Tempi, Variabilità, Prezzi)  //
-  ////////////////////////////////////////////////////////////
+  config->price_primi = 5.5;
+  config->price_secondi = 8.2;
+  config->price_caffe = 1.2;
+  config->ticket_discount_percent = 25.0;
 
-  // tempi medi
-  if (config->avg_service_primi == 0) {
-    config->avg_service_primi = 100000000;
-  }
-  if (config->avg_service_secondi == 0) {
-    config->avg_service_secondi = 120000000;
-  }
-  if (config->avg_service_caffe == 0) {
-    config->avg_service_caffe = 50000000;
-  }
-  if (config->avg_service_cassa == 0) {
-    config->avg_service_cassa = 60000000;
-  }
-  // variabilità
-  if (config->variability_primi == 0) {
-    config->variability_primi = 30;
-  }
-  if (config->variability_secondi == 0) {
-    config->variability_secondi = 30;
-  }
-  if (config->variability_caffe == 0) {
-    config->variability_caffe = 20;
-  }
-  if (config->variability_cassa == 0) {
-    config->variability_cassa = 20;
-  }
-  // prezzi
-  if (config->price_primi == 0) {
-    config->price_primi = 5.5;
-  }
-  if (config->price_secondi == 0) {
-    config->price_secondi = 8.2;
-  }
-  if (config->price_caffe == 0) {
-    config->price_caffe = 1.2;
-  }
-  if (config->ticket_discount_percent == 0) {
-    config->ticket_discount_percent = 25.0;
-  }
+  // 5) OPERATORI
+  config->max_pauses_per_day = 2;
+  config->pause_duration_ns = 300000000;
+  config->pause_probability_percent = 10;
+  config->day_end_barrier_wait_sec = 30;
 
-  //////////////////////////////////////////
-  //  5) COMPORTAMENTO OPERATORI (Pause)  //
-  //////////////////////////////////////////
+  // 6) UTENTI
+  config->user_queue_timeout_sec = 5;
+  config->user_meal_duration_ns = 2000000000;
+  config->user_coffee_duration_ns = 10000000;
+  config->user_max_arrival_delay_us = 10000000;
 
-  if (config->max_pauses_per_day == 0) {
-    config->max_pauses_per_day = 2;
-  }
-  if (config->pause_duration_ns == 0) {
-    config->pause_duration_ns = 300000000;
-  }
-  if (config->pause_probability_percent == 0) {
-    config->pause_probability_percent = 10;
-  }
-  if (config->day_end_barrier_wait_sec == 0) {
-    config->day_end_barrier_wait_sec = 30;
-  }
+  config->probability_user_wants_primo = 60;
+  config->probability_user_wants_secondo = 70;
+  config->probability_user_wants_caffe = 20;
 
-  ////////////////////////////////////////////
-  //  6) COMPORTAMENTO E PREFERENZE UTENTI  //
-  ////////////////////////////////////////////
+  config->user_budget_min = 10;
+  config->user_budget_max = 50;
+  config->user_min_daily_salary = 5;
+  config->user_max_daily_salary = 15;
 
-  // comportamento
-  if (config->user_queue_timeout_sec == 0) {
-    config->user_queue_timeout_sec = 5;
-  }
-  if (config->user_meal_duration_ns == 0) {
-    config->user_meal_duration_ns = 2000000000;
-  }
-  if (config->user_coffee_duration_ns == 0) {
-    config->user_coffee_duration_ns = 10000000;
-  }
-  if (config->user_max_arrival_delay_us == 0) {
-    config->user_max_arrival_delay_us = 10000000;
-  }
-  // preferenze
-  if (config->probability_user_wants_primo == 0) {
-    config->probability_user_wants_primo = 60;
-  }
-  if (config->probability_user_wants_secondo == 0) {
-    config->probability_user_wants_secondo = 70;
-  }
-  if (config->probability_user_wants_caffe == 0) {
-    config->probability_user_wants_caffe = 20;
-  }
+  // 7) LOGISTICA
+  config->refill_interval_minutes = 10;
+  config->avg_refill_primi = 40;
+  config->avg_refill_secondi = 40;
 
-  // budget
-  if (config->user_budget_min == 0) {
-    config->user_budget_min = 10;
-  }
-  if (config->user_budget_max == 0) {
-    config->user_budget_max = 50;
-  }
-  if (config->user_min_daily_salary == 0) {
-    config->user_min_daily_salary = 5;
-  }
-  if (config->user_max_daily_salary == 0) {
-    config->user_max_daily_salary = 15;
-  }
+  config->max_porzioni_primi = 50;
+  config->max_porzioni_secondi = 50;
+  config->max_porzioni_caffe = 1000;
 
-  ///////////////////////////////////
-  //  7) LOGISTICA (Rifornimenti)  //
-  ///////////////////////////////////
+  // 8) TOOLS
+  config->default_sciopero_stop_duration = 60;
 
-  if (config->refill_interval_minutes == 0) {
-    config->refill_interval_minutes = 10;
-  }
+  strncpy(config->export_folder_path, "reports/",
+          sizeof(config->export_folder_path) - 1);
 
-  if (config->avg_refill_primi == 0) {
-    config->avg_refill_primi = 40;
-  }
-  if (config->avg_refill_secondi == 0) {
-    config->avg_refill_secondi = 40;
-  }
+  config->export_daily_reports_csv = false;
+  strncpy(config->daily_reports_filename_csv, "days/daily_report",
+          sizeof(config->daily_reports_filename_csv) - 1);
 
-  if (config->max_porzioni_primi == 0) {
-    config->max_porzioni_primi = 50;
-  }
-  if (config->max_porzioni_secondi == 0) {
-    config->max_porzioni_secondi = 50;
-  }
-  if (config->max_porzioni_caffe == 0) {
-    config->max_porzioni_caffe = 1000;
-  }
-
-  ////////////////
-  //  8) TOOLS  //
-  ////////////////
-
-  if (config->default_sciopero_stop_duration == 0) {
-    config->default_sciopero_stop_duration = 60;
-  }
-
-  if (strlen(config->export_folder_path) == 0) {
-    strncpy(config->export_folder_path, "reports/",
-            sizeof(config->export_folder_path) - 1);
-    config->export_folder_path[sizeof(config->export_folder_path) - 1] = '\0';
-  }
-
-  if (config->export_daily_reports_csv == false) {
-    config->export_daily_reports_csv = false;
-  }
-  if (strlen(config->daily_reports_filename_csv) == 0) {
-    strncpy(config->daily_reports_filename_csv, "days/daily_report",
-            sizeof(config->daily_reports_filename_csv) - 1);
-    config->daily_reports_filename_csv[sizeof(config->daily_reports_filename_csv) - 1] =
-        '\0';
-  }
-  if (config->export_final_stats_csv == false) {
-    config->export_final_stats_csv = false;
-  }
-  if (strlen(config->final_stats_filename_csv) == 0) {
-    strncpy(config->final_stats_filename_csv, "final_stats",
-            sizeof(config->final_stats_filename_csv) - 1);
-    config->final_stats_filename_csv[sizeof(config->final_stats_filename_csv) -
-                                     1] = '\0';
-  }
+  config->export_final_stats_csv = false;
+  strncpy(config->final_stats_filename_csv, "final_stats",
+          sizeof(config->final_stats_filename_csv) - 1);
 }
 
 int parse_config(const char *filename, Config *config) {
   FILE *file = fopen(filename, "r");
   int result = 0;
 
+  memset(config, 0, sizeof(Config));
+
+  set_default_values(config);
+
   if (!file) {
-    LOG_ERR("CONFIG", "Impossibile aprire file config: %s", filename);
-    result = -1;
+    LOG_ERR("CONFIG", "Impossibile aprire file config (uso default): %s",
+            filename);
+    // result = -1;
   } else {
     char line[MAX_LINE_LENGTH];
     int line_num = 0;
-
-    memset(config, 0, sizeof(Config));
 
     while (fgets(line, sizeof(line), file)) {
       line_num++;
@@ -516,7 +369,7 @@ int parse_config(const char *filename, Config *config) {
         }
       }
     }
-    set_default_values(config);
+
     fclose(file);
   }
   return result;
