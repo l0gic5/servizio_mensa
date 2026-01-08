@@ -20,15 +20,15 @@ COMMON_OBJS = $(patsubst $(SRC_DIR)/common/%.c, $(BUILD_DIR)/common/%.o, $(COMMO
 
 PROCESS_SRCS = $(wildcard $(SRC_DIR)/processes/*.c)
 PROCESS_OBJS = $(patsubst $(SRC_DIR)/processes/%.c, $(BUILD_DIR)/processes/%.o, $(PROCESS_SRCS))
-PROCESS_BINS = $(patsubst $(SRC_DIR)/processes/%.c, $(BIN_DIR)/%, $(PROCESS_SRCS))
+PROCESS_BINS = $(patsubst $(SRC_DIR)/processes/%.c, $(BIN_DIR)/processes/%, $(PROCESS_SRCS))
 
 EXECUTABLES_SRCS = $(wildcard $(SRC_DIR)/executables/*.c)
 EXECUTABLES_OBJS = $(patsubst $(SRC_DIR)/executables/%.c, $(BUILD_DIR)/executables/%.o, $(EXECUTABLES_SRCS))
-EXECUTABLES_BINS = $(patsubst $(SRC_DIR)/executables/%.c, $(BIN_DIR)/%, $(EXECUTABLES_SRCS))
+EXECUTABLES_BINS = $(patsubst $(SRC_DIR)/executables/%.c, $(BIN_DIR)/executables/%, $(EXECUTABLES_SRCS))
 
 TEST_SRCS = $(wildcard $(TEST_DIR)/*.c)
 TEST_OBJS = $(patsubst $(TEST_DIR)/%.c, $(BUILD_DIR)/test/%.o, $(TEST_SRCS))
-TEST_BINS = $(patsubst $(TEST_DIR)/%.c, $(BIN_DIR)/%, $(TEST_SRCS))
+TEST_BINS = $(patsubst $(TEST_DIR)/%.c, $(BIN_DIR)/test/%, $(TEST_SRCS))
 
 UNITY_OBJ = $(BUILD_DIR)/unity.o
 
@@ -38,18 +38,18 @@ DOXYFILE = Doxyfile
 
 all: $(PROCESS_BINS) $(EXECUTABLES_BINS) $(TEST_BINS)
 
-$(PROCESS_BINS): $(BIN_DIR)/%: $(BUILD_DIR)/processes/%.o $(COMMON_OBJS)
-	@mkdir -p $(BIN_DIR)
+$(PROCESS_BINS): $(BIN_DIR)/processes/%: $(BUILD_DIR)/processes/%.o $(COMMON_OBJS)
+	@mkdir -p $(BIN_DIR)/processes
 	@echo "Linking Process: $@"
 	$(CC) $(CFLAGS) $^ -o $@ -lm
 
-$(EXECUTABLES_BINS): $(BIN_DIR)/%: $(BUILD_DIR)/executables/%.o $(COMMON_OBJS)
-	@mkdir -p $(BIN_DIR)
+$(EXECUTABLES_BINS): $(BIN_DIR)/executables/%: $(BUILD_DIR)/executables/%.o $(COMMON_OBJS)
+	@mkdir -p $(BIN_DIR)/executables
 	@echo "Linking Executables tools: $@"
 	$(CC) $(CFLAGS) $^ -o $@ -lm
 
-$(TEST_BINS): $(BIN_DIR)/%: $(BUILD_DIR)/test/%.o $(COMMON_OBJS) $(UNITY_OBJ)
-	@mkdir -p $(BIN_DIR)
+$(TEST_BINS): $(BIN_DIR)/test/%: $(BUILD_DIR)/test/%.o $(COMMON_OBJS) $(UNITY_OBJ)
+	@mkdir -p $(BIN_DIR)/test
 	@echo "Linking Test: $@"
 	$(CC) $(CFLAGS) $^ -o $@ -lm
 
