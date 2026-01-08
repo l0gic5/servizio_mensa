@@ -24,8 +24,8 @@
 #include "common/config.h"
 #include "common/ipc_utils.h"
 #include "common/logger.h"
-#include "common/types.h"
 #include "common/stats.h"
+#include "common/types.h"
 
 static int g_shm_stats_id = -1;
 static int g_shm_roles_id = -1;
@@ -232,9 +232,7 @@ void attempt_pause(int sem_id, int sem_workstation_index, int *pauses_done,
     // ACCETTABILE !!
     // == il processo potrebbe essere prelevato dalla CPU tra il check e il wait
 
-    if (sem_wait(sem_id, SEM_INDEX_MUTEX_STATS) == -1) {
-      return;
-    }
+    sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
 
     int active = 0;
     switch (role) {
@@ -255,7 +253,7 @@ void attempt_pause(int sem_id, int sem_workstation_index, int *pauses_done,
 
     // SE ultimo rimasto (active <= 1), niente pausa
     if (active <= 1) {
-      sem_signal(sem_id, SEM_INDEX_MUTEX_STATS);
+      sem_mutex_release(sem_id, SEM_INDEX_MUTEX_STATS);
       LOG_INFO("OPERATORE", "Pausa negata: unico operatore attivo per %s",
                ROLE_NAME(role));
       return;
@@ -276,7 +274,7 @@ void attempt_pause(int sem_id, int sem_workstation_index, int *pauses_done,
       g_worker_config->active_cassa--;
       break;
     }
-    sem_signal(sem_id, SEM_INDEX_MUTEX_STATS);
+    sem_mutex_release(sem_id, SEM_INDEX_MUTEX_STATS);
 
     LOG_INFO("OPERATORE", "Pausa %d/%d (Ruolo %s)", *pauses_done + 1,
              config.max_pauses_per_day, ROLE_NAME(role));
@@ -305,7 +303,7 @@ void attempt_pause(int sem_id, int sem_workstation_index, int *pauses_done,
     }
 
     // fine pausa
-    sem_wait(sem_id, SEM_INDEX_MUTEX_STATS);
+    sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
 
     switch (role) {
     case OP_PRIMI:
@@ -323,7 +321,7 @@ void attempt_pause(int sem_id, int sem_workstation_index, int *pauses_done,
       break;
     }
 
-    sem_signal(sem_id, SEM_INDEX_MUTEX_STATS);
+    sem_mutex_release(sem_id, SEM_INDEX_MUTEX_STATS);
 
     LOG_INFO("OPERATORE", "Rientrato in servizio.");
   }
@@ -385,7 +383,7 @@ void service_cycle(int msg_id, int sem_id, int sem_index, long avg_time,
       OrderStatus order_status = ORDER_SOLD_OUT;
 
       // aggiornamento statistiche
-      sem_wait(sem_id, SEM_INDEX_MUTEX_STATS);
+      sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
 
       switch (role) {
       case OP_PRIMI:
@@ -418,7 +416,7 @@ void service_cycle(int msg_id, int sem_id, int sem_index, long avg_time,
         break;
       }
 
-      sem_signal(sem_id, SEM_INDEX_MUTEX_STATS);
+      sem_mutex_release(sem_id, SEM_INDEX_MUTEX_STATS);
 
       long srv_time = calculate_service_time(avg_time, range_p);
       struct timespec t = {0, srv_time};
@@ -492,7 +490,7 @@ int main(int argc, char *argv[]) {
                         &sem_workstation_index, &msg_type_req, &range_percent);
 
     // 1) competizione per la Workstation
-    LOG_INFO("OPERATORE", "Giorno %d: In coda per workstation ruolo %s...", day,
+    LOG_CONF("OPERATORE", "Giorno %d: In coda per workstation ruolo %s...", day,
              ROLE_NAME(my_role));
 
     bool acquired = false;

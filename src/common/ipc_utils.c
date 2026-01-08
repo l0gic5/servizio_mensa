@@ -183,7 +183,8 @@ int send_message(int msg_id, void *msg, size_t size, int flags) {
   int res = msgsnd(msg_id, msg, size, flags);
   if (res == -1) {
     // ignora se coda piena e richiesto non bloccante
-    if (!(errno == EAGAIN && (flags & IPC_NOWAIT))) {
+
+    if (errno != EINTR && !(errno == EAGAIN && (flags & IPC_NOWAIT))) {
       TEST_ERROR;
     }
   }
@@ -215,3 +216,20 @@ int remove_msg_queue(int msg_id) {
 
   return res;
 }
+
+void sem_mutex_acquire(int sem_id, int sem_num) {
+  struct sembuf sb;
+  sb.sem_num = (unsigned short)sem_num;
+  sb.sem_op = -1;
+  sb.sem_flg = SEM_UNDO;
+
+  while (semop(sem_id, &sb, 1) == -1) {
+    if (errno == EINTR) {
+      continue;
+    }
+    TEST_ERROR;
+    exit(EXIT_FAILURE);
+  }
+}
+
+void sem_mutex_release(int sem_id, int sem_num) { sem_signal(sem_id, sem_num); }

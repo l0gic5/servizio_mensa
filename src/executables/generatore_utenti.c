@@ -23,7 +23,7 @@
 #include "common/logger.h"
 #include "common/types.h"
 
-#define PATH_UTENTE "./bin/utente"
+#define PATH_UTENTE "./bin/processes/utente"
 
 static volatile int keep_running = 1;
 
@@ -107,6 +107,14 @@ int main(int argc, char *argv[]) {
   printf(COLOR_YELLOW "\n!!! SPAWN %d UTENTI !!!" COLOR_RESET "\n",
          num_users_to_spawn);
 
+  struct shmid_ds buf;
+  if (shmctl(shm_id, IPC_STAT, &buf) == -1) {
+    printf(COLOR_RED "Errore: La Shared Memory non esiste più. Responsabile "
+                     "morto?\n" COLOR_RESET);
+    detach_shm(worker_config);
+    return EXIT_FAILURE;
+  }
+
   for (int i = 0; i < num_users_to_spawn; i++) {
     pids[i] = spawn_user(config_path, &config);
     if (pids[i] > 0) {
@@ -134,10 +142,14 @@ int main(int argc, char *argv[]) {
 
   if (semop(sem_id, &sb, 1) == -1) {
     if (errno == EINTR) {
-      printf("\nInterrotto dall'utente.\n");
+      printf("\n[INFO] Interrotto dall'utente (CTRL+C locale).\n");
+    } else if (errno == EIDRM || errno == EINVAL) {
+      printf(COLOR_RED "\n[ALLERT] Il Responsabile è terminato (Semaforo "
+                       "rimosso)!\n" COLOR_RESET);
     } else {
       perror("semop wait day change");
     }
+    keep_running = 0;
   } else {
     printf(COLOR_PURPLE "\n[EVENTO] Segnale ricevuto! Il Responsabile ha "
                         "cambiato giorno (%d)!\n" COLOR_RESET,

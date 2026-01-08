@@ -120,7 +120,8 @@ typedef struct config {
 
   char export_folder_path[256]; // EXPORT_FOLDER_PATH
 
-  bool export_daily_reports_csv;    // EXPORT_DAILY_REPORTS_CSV
+  bool export_daily_reports_csv;        // EXPORT_DAILY_REPORTS_CSV
+  bool create_daily_single_files;       // CREATE_DAILY_SINGLE_FILES
   char daily_reports_filename_csv[256]; // DAILY_REPORTS_FILENAME_CSV
 
   bool export_final_stats_csv;        // EXPORT_FINAL_STATS_CSV

@@ -70,9 +70,7 @@ double get_current_time_sec() {
  * @brief Aggiorna le statistiche dei tempi di attesa in SHM
  */
 void update_wait_stats(OpType type, double wait_time) {
-  if (sem_wait(g_sem_id, SEM_INDEX_MUTEX_STATS) == -1) {
-    return;
-  }
+  sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
 
   switch (type) {
   case OP_PRIMI:
@@ -89,37 +87,34 @@ void update_wait_stats(OpType type, double wait_time) {
     break;
   }
 
-  sem_signal(g_sem_id, SEM_INDEX_MUTEX_STATS);
+  sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
 }
 
 /**
  * @brief Segnala che l'utente è stato servito con successo.
  */
 void mark_as_served() {
-  if (sem_wait(g_sem_id, SEM_INDEX_MUTEX_STATS) != -1) {
-    g_stats->total_users_served++;
-    sem_signal(g_sem_id, SEM_INDEX_MUTEX_STATS);
-  }
+  sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
+  g_stats->total_users_served++;
+  sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
 }
 
 /**
  * @brief Segnala che l'utente è stato rifiutato (code piene).
  */
 void mark_as_refused() {
-  if (sem_wait(g_sem_id, SEM_INDEX_MUTEX_STATS) != -1) {
-    g_stats->total_users_refused++;
-    sem_signal(g_sem_id, SEM_INDEX_MUTEX_STATS);
-  }
+  sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
+  g_stats->total_users_refused++;
+  sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
 }
 
 /**
  * @brief Segnala che l'utente ha un ticket.
  */
 void mark_as_w_ticket() {
-  if (sem_wait(g_sem_id, SEM_INDEX_MUTEX_STATS) != -1) {
-    g_stats->total_users_w_ticket++;
-    sem_signal(g_sem_id, SEM_INDEX_MUTEX_STATS);
-  }
+  sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
+  g_stats->total_users_w_ticket++;
+  sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
 }
 
 /**
@@ -228,7 +223,9 @@ int perform_order(OpType type, int msg_type, double amount, bool has_ticket) {
   }
 
   if (send_message(g_msg_id, &req, REQ_PAYLOAD_SIZE, 0) == -1) {
-    LOG_ERR("UTENTE", "Errore invio richiesta %s", ROLE_NAME(type));
+    if (errno != EINTR) {
+      LOG_ERR("UTENTE", "Errore invio richiesta %s", ROLE_NAME(type));
+    }
     return -1;
   }
 
@@ -347,7 +344,7 @@ void user_routine(Config *cfg, double *current_budget, bool has_ticket) {
   bool got_primo = false;
   bool got_secondo = false;
 
-  if (has_ticket && g_running) {
+  if (has_ticket && g_running && !g_day_ended) {
     if (enter_queue(SEM_INDEX_TICKET_READER, "TICKET_READER",
                     cfg->user_queue_timeout_sec) == 0) {
       LOG_INFO("UTENTE", "Valido il ticket...");
@@ -408,7 +405,7 @@ void user_routine(Config *cfg, double *current_budget, bool has_ticket) {
 
   // 2) PRELIEVO CIBO (primi / secondi)
   // primi
-  if (wants_primo && g_running) {
+  if (wants_primo && g_running && !g_day_ended) {
     double start = get_current_time_sec();
     if (enter_queue(SEM_INDEX_SEATS_PRIMI, "PRIMI",
                     cfg->user_queue_timeout_sec) == 0) {
@@ -437,7 +434,7 @@ void user_routine(Config *cfg, double *current_budget, bool has_ticket) {
   }
 
   // secondi
-  if (wants_secondo && g_running) {
+  if (wants_secondo && g_running && !g_day_ended) {
     double start = get_current_time_sec();
     if (enter_queue(SEM_INDEX_SEATS_SECONDI, "SECONDI",
                     cfg->user_queue_timeout_sec) == 0) {
@@ -466,7 +463,7 @@ void user_routine(Config *cfg, double *current_budget, bool has_ticket) {
     }
   }
 
-  if (!got_primo && !got_secondo && !wants_caffe) {
+  if (!got_primo && !got_secondo && !wants_caffe && !g_day_ended) {
     mark_as_refused();
     LOG_INFO("UTENTE", "Oggi non mangio niente. Esco.");
     return;
@@ -482,7 +479,7 @@ void user_routine(Config *cfg, double *current_budget, bool has_ticket) {
     importo_effettivo -= sconto;
   }
 
-  if (g_running && conto_da_pagare > 0.001) {
+  if (g_running && conto_da_pagare > 0.001 && !g_day_ended) {
 
     if (*current_budget < importo_effettivo) {
       LOG_WARN("UTENTE", "Budget insufficiente anche con sconto. Esco.");
@@ -523,13 +520,13 @@ void user_routine(Config *cfg, double *current_budget, bool has_ticket) {
 
   // 4) CONSUMO PASTO (Tavolo)
 
-  if ((got_primo || got_secondo) && g_running) {
+  if ((got_primo || got_secondo) && g_running && !g_day_ended) {
     consume_main_meal(cfg, true);
   }
 
   // 5) CAFFÈ
 
-  if (wants_caffe && g_running) {
+  if (wants_caffe && g_running && !g_day_ended) {
     double start = get_current_time_sec();
 
     if (enter_queue(SEM_INDEX_SEATS_CAFFE, "CAFFE",
@@ -637,12 +634,23 @@ int main(int argc, char *argv[]) {
     LOG_INFO("UTENTE", "Finito il pasto, attendo chiusura mensa (Giorno %d)...",
              day);
 
-    // attende il segnale SIGUSR1 dal Responsabile
-    // pause() ritorna -1 con errno=EINTR quando arriva un segnale gestito
-    if (g_running && !g_day_ended) {
-      LOG_INFO("UTENTE",
-               "Finito il pasto, attendo chiusura mensa (Giorno %d)...", day);
-      pause();
+    // race condition fixed!
+    if (g_running) {
+      sigset_t mask, old_mask;
+      sigemptyset(&mask);
+      sigaddset(&mask, SIGUSR1);
+
+      // blocco SIGUSR1
+      sigprocmask(SIG_BLOCK, &mask, &old_mask);
+
+      // segnale è già arrivato prima che bloccassi o è arrivato mentre stavo
+      // bloccando?
+      if (!g_day_ended) {
+        // se giorno non è ancora finito, mi metto in attesa.
+        sigsuspend(&old_mask);
+      }
+
+      sigprocmask(SIG_SETMASK, &old_mask, NULL);
     }
 
     signal_end_of_day();

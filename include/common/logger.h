@@ -12,6 +12,7 @@
 #define COLOR_YELLOW "\x1b[33m"
 #define COLOR_BLUE "\x1b[34m"
 #define COLOR_PURPLE "\x1b[35m"
+#define COLOR_PINK "\x1b[95m"
 #define COLOR_CYAN "\x1b[36m"
 #define COLOR_RESET "\x1b[0m"
 
@@ -31,7 +32,7 @@
 #define ROLE_NAME(r)                                                           \
   ((r) == 0   ? "PRIMI"                                                        \
    : (r) == 1 ? "SECONDI"                                                      \
-   : (r) == 2 ? "CAFFE"                                                       \
+   : (r) == 2 ? "CAFFE"                                                        \
    : (r) == 3 ? "CASSA"                                                        \
               : "IGNOTO")
 
@@ -46,6 +47,12 @@
   fprintf(stdout,                                                              \
           COLOR_GREEN "[%s]" COLOR_PURPLE "(%d) " COLOR_RESET msg "\n", ctx,   \
           getpid(), ##__VA_ARGS__)
+
+#define LOG_CONF(ctx, msg, ...)                                                \
+  fprintf(stdout,                                                              \
+          COLOR_PINK "[%s]" COLOR_PURPLE "(%d) " COLOR_PINK                    \
+                     "CONF: " msg COLOR_RESET "\n",                         \
+          ctx, getpid(), ##__VA_ARGS__)
 
 #define LOG_WARN(ctx, msg, ...)                                                \
   fprintf(stdout,                                                              \

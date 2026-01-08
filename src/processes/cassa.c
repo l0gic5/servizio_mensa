@@ -20,8 +20,8 @@
 #include "common/config.h"
 #include "common/ipc_utils.h"
 #include "common/logger.h"
-#include "common/types.h"
 #include "common/stats.h"
+#include "common/types.h"
 
 static int g_shm_stats_id = -1;
 static int g_shm_roles_id = -1;
@@ -180,11 +180,10 @@ int main(int argc, char *argv[]) {
         nanosleep(&t, NULL);
 
         // statistiche (MUTual EXclusion)
-        if (sem_wait(g_sem_id, SEM_INDEX_MUTEX_STATS) != -1) {
-          g_stats->total_revenue += req.total_cost;
-          g_stats->total_transactions++;
-          sem_signal(g_sem_id, SEM_INDEX_MUTEX_STATS);
-        }
+        sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
+        g_stats->total_revenue += req.total_cost;
+        g_stats->total_transactions++;
+        sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
 
         char *log_msg = req.wants_ticket ? "scontato ticket" : "prezzo intero";
         LOG_INFO("CASSA", "Incasso: %.2f€ [%s] (Cliente PID %d)",

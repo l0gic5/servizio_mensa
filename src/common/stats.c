@@ -5,6 +5,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <stdbool.h>
 
 #include "common/logger.h"
 #include "common/stats.h"
@@ -12,21 +13,34 @@
 static const char *CSV_HEADER =
     "Tipo,Giorno,"
     "Utenti_Serviti,Utenti_Respinti,"
+    "Utenti_con_Ticket,"
     "Primi,Secondi,Caffe,"
     "Ricavo,"
     "Attesa_Primi,Attesa_Secondi,Attesa_Caffe,Attesa_Cassa,"
     "Transazioni,"
-    "Leftover_Primi,Leftover_Secondi,Leftover_Caffe"
+    "Leftover_Primi,Leftover_Secondi,Leftover_Caffe,"
+    "Refill_Primi,Refill_Secondi,Refill_Caffe"
     "\n";
 
-static const char *CSV_FORMAT = "%s,%d,"               // Tipo, Giorno
-                                "%d,%d,"               // Serviti, Respinti
-                                "%d,%d,%d,"            // Piatti
-                                "%.2f,"                // Ricavo
-                                "%.4f,%.4f,%.4f,%.4f," // Tempi Attesa
-                                "%d,"                  // Transazioni
-                                "%d,%d,%d"             // Leftovers
-                                "\n";
+static const char *CSV_FORMAT_DAILY = "%s,%d,"    // Tipo, Giorno
+                                      "%d,%d,%d," // Serviti, Respinti, Ticket
+                                      "%d,%d,%d," // Piatti
+                                      "%.2f,"     // Ricavo
+                                      "%.5f,%.5f,%.5f,%.5f," // Tempi Attesa
+                                      "%d,"                  // Transazioni
+                                      "%d,%d,%d,"            // Leftovers
+                                      "%d,%d,%d"             // Refill (INT)
+                                      "\n";
+
+static const char *CSV_FORMAT_FINAL = "%s,%d,"
+                                      "%d,%d,%d,"
+                                      "%d,%d,%d,"
+                                      "%.2f,"
+                                      "%.5f,%.5f,%.5f,%.5f,"
+                                      "%d,"
+                                      "%.2f,%.2f,%.2f,"
+                                      "%.2f,%.2f,%.2f"
+                                      "\n";
 
 /**
  * @brief Calcola la media sicura.
@@ -167,10 +181,12 @@ static void ensure_csv_header(const char *path) {
  * @brief Scrive una riga nel file CSV.
  *
  * @param f File pointer
+ * @param format Formato della riga (DAILY o FINAL)
  * @param type Tipo di report (DAILY o FINAL)
  * @param day Giorno del report (0 per finale)
  * @param served Utenti serviti
  * @param refused Utenti respinti
+ * @param served_w_ticket Utenti serviti con ticket
  * @param p Primi serviti
  * @param s Secondi serviti
  * @param c Caffè serviti
@@ -183,14 +199,29 @@ static void ensure_csv_header(const char *path) {
  * @param l_p Leftover primi
  * @param l_s Leftover secondi
  * @param l_c Leftover caffè
+ * @param r_p Refill primi
+ * @param r_s Refill secondi
+ * @param r_c Refill caffè
  */
-static void write_csv_row(FILE *f, const char *type, int day, int served,
-                          int refused, int p, int s, int c, double rev,
-                          double w_p, double w_s, double w_c, double w_ca,
-                          int trans, int l_p, int l_s, int l_c) {
-  if (fprintf(f, CSV_FORMAT, type, day, served, refused, p, s, c, rev, w_p, w_s,
-              w_c, w_ca, trans, l_p, l_s, l_c) < 0) {
-    LOG_ERR("STATS", "Errore scrittura riga CSV: %s", strerror(errno));
+static void write_csv_row(FILE *f, const char *format, const char *type,
+                          int day, int served, int refused, int served_w_ticket,
+                          int p, int s, int c, double rev, double w_p,
+                          double w_s, double w_c, double w_ca, int trans,
+                          double l_p, double l_s, double l_c, double r_p,
+                          double r_s, double r_c) {
+
+  if (format == CSV_FORMAT_DAILY) {
+    if (fprintf(f, format, type, day, served, refused, served_w_ticket, p, s, c,
+                rev, w_p, w_s, w_c, w_ca, trans, (int)l_p, (int)l_s, (int)l_c,
+                (int)r_p, (int)r_s, (int)r_c) < 0) {
+      LOG_ERR("STATS", "Errore scrittura riga CSV: %s", strerror(errno));
+    }
+  } else {
+    if (fprintf(f, format, type, day, served, refused, served_w_ticket, p, s, c,
+                rev, w_p, w_s, w_c, w_ca, trans, l_p, l_s, l_c, r_p, r_s,
+                r_c) < 0) {
+      LOG_ERR("STATS", "Errore scrittura riga CSV: %s", strerror(errno));
+    }
   }
 }
 
@@ -199,10 +230,12 @@ static void write_csv_row(FILE *f, const char *type, int day, int served,
  * Gestisce apertura, header (se nuovo) e chiusura.
  *
  * @param full_path Percorso completo del file CSV
+ * @param format Formato della riga (DAILY o FINAL)
  * @param row_type Tipo di riga (DAILY o FINAL)
  * @param day Giorno del report (0 per finale)
  * @param served Utenti serviti
  * @param refused Utenti respinti
+ * @param served_w_ticket Utenti serviti con ticket
  * @param p Primi serviti
  * @param s Secondi serviti
  * @param c Caffè serviti
@@ -215,12 +248,17 @@ static void write_csv_row(FILE *f, const char *type, int day, int served,
  * @param l_p Leftover primi
  * @param l_s Leftover secondi
  * @param l_c Leftover caffè
+ * @param r_p Refill primi
+ * @param r_s Refill secondi
+ * @param r_c Refill caffè
  */
-static void append_stats_to_file(const char *full_path, const char *row_type,
-                                 int day, int served, int refused, int p, int s,
+static void append_stats_to_file(const char *full_path, const char *format,
+                                 const char *row_type, int day, int served,
+                                 int refused, int served_w_ticket, int p, int s,
                                  int c, double rev, double w_p, double w_s,
-                                 double w_c, double w_ca, int trans, int l_p,
-                                 int l_s, int l_c) {
+                                 double w_c, double w_ca, int trans, double l_p,
+                                 double l_s, double l_c, double r_p, double r_s,
+                                 double r_c) {
 
   if (ensure_folder_exists(full_path) == -1) {
     return;
@@ -235,50 +273,54 @@ static void append_stats_to_file(const char *full_path, const char *row_type,
     return;
   }
 
-  write_csv_row(f, row_type, day, served, refused, p, s, c, rev, w_p, w_s, w_c,
-                w_ca, trans, l_p, l_s, l_c);
+  write_csv_row(f, format, row_type, day, served, refused, served_w_ticket, p,
+                s, c, rev, w_p, w_s, w_c, w_ca, trans, l_p, l_s, l_c, r_p, r_s,
+                r_c);
   fclose(f);
 }
 
 char *process_daily_report(DailyReport *report, GlobalStats *total_stats) {
   char *buffer = NULL;
 
-  double avg_p =
+  double avg_wait_time_primi =
       calculate_avg(report->daily_wait_primi, report->daily_plates_primi);
-  double avg_s =
+  double avg_wait_time_secondi =
       calculate_avg(report->daily_wait_secondi, report->daily_plates_secondi);
-  double avg_c =
+  double avg_wait_time_caffe =
       calculate_avg(report->daily_wait_caffe, report->daily_plates_caffe);
-  double avg_ca =
+  double avg_wait_time_cassa =
       calculate_avg(report->daily_wait_cassa, report->daily_transactions);
 
-  int len = asprintf(&buffer,
-                     "\n" COLOR_BLUE
-                     "========== REPORT GIORNO %d ==========" COLOR_RESET "\n"
-                     "Utenti Serviti:   %d\n"
-                     "  * con ticket: (%d/%d)\n"
-                     "Utenti Respinti:  %d\n"
-                     "Piatti Distribuiti:\n"
-                     "  - Primi:   %d (Avanzi: %d)\n"
-                     "  - Secondi: %d (Avanzi: %d)\n"
-                     "  - Caffè:   %d\n"
-                     "Ricavo Giornata:  %.2f€\n" COLOR_CYAN
-                     "======== Totali Accumulati =========\n" COLOR_RESET
-                     "Totale Serviti:   %d\n"
-                     "Totale Ricavi:    %.2f€\n" COLOR_CYAN
-                     "====== Tempi Medi Attesa (s) =======\n" COLOR_RESET
-                     "  - Primi:   %.4f s\n"
-                     "  - Secondi: %.4f s\n"
-                     "  - Caffè:   %.4f s\n"
-                     "  - Cassa:   %.4f s\n" COLOR_BLUE
-                     "====================================" COLOR_RESET "\n",
-                     report->day_number, report->daily_users_served,
-                     report->daily_users_w_ticket, report->daily_users_served,
-                     report->daily_users_refused, report->daily_plates_primi,
-                     report->leftover_primi, report->daily_plates_secondi,
-                     report->leftover_secondi, report->daily_plates_caffe,
-                     report->daily_revenue, total_stats->total_users_served,
-                     total_stats->total_revenue, avg_p, avg_s, avg_c, avg_ca);
+  int len = asprintf(
+      &buffer,
+      "\n" COLOR_BLUE "========== REPORT GIORNO %d ==========" COLOR_RESET "\n"
+      "Utenti Serviti:   %d\n"
+      "  * con ticket: (%d/%d)\n"
+      "Utenti Respinti:  %d\n"
+      "Piatti Distribuiti:\n"
+      "  - Primi:   %d (Avanzi: %d  |  Refill: %d)\n"
+      "  - Secondi: %d (Avanzi: %d  |  Refill: %d)\n"
+      "  - Caffè:   %d (Avanzi: %d  |  Refill: %d)\n"
+      "Ricavo Giornata:  %.2f€\n" COLOR_CYAN
+      "=========== Totali ad Oggi ===========\n" COLOR_RESET
+      "Totale Serviti:   %d\n"
+      "Totale Ricavi:    %.2f€\n" COLOR_CYAN
+      "======= Tempi Medi Attesa (s) ========\n" COLOR_RESET
+      "  - Primi:   %.5f s\n"
+      "  - Secondi: %.5f s\n"
+      "  - Caffè:   %.5f s\n"
+      "  - Cassa:   %.5f s\n" COLOR_BLUE
+      "======================================" COLOR_RESET "\n\n",
+      report->day_number, report->daily_users_served,
+      report->daily_users_w_ticket, report->daily_users_served,
+      report->daily_users_refused, report->daily_plates_primi,
+      report->leftover_primi, report->daily_refilled_primi,
+      report->daily_plates_secondi, report->leftover_secondi,
+      report->daily_refilled_secondi, report->daily_plates_caffe,
+      report->leftover_caffe, report->daily_refilled_caffe,
+      report->daily_revenue, total_stats->total_users_served,
+      total_stats->total_revenue, avg_wait_time_primi, avg_wait_time_secondi,
+      avg_wait_time_caffe, avg_wait_time_cassa);
 
   if (len == -1) {
     return NULL;
@@ -290,14 +332,28 @@ char *process_daily_report(DailyReport *report, GlobalStats *total_stats) {
 char *process_final_report(GlobalStats *stats, int total_days) {
   char *buffer = NULL;
 
-  double avg_p =
+  double avg_wait_time_primi =
       calculate_avg(stats->total_wait_time_primi, stats->total_plates_primi);
-  double avg_s = calculate_avg(stats->total_wait_time_secondi,
-                               stats->total_plates_secondi);
-  double avg_c =
+  double avg_wait_time_secondi = calculate_avg(stats->total_wait_time_secondi,
+                                               stats->total_plates_secondi);
+  double avg_wait_time_caffe =
       calculate_avg(stats->total_wait_time_caffe, stats->total_plates_caffe);
-  double avg_ca =
+  double avg_wait_time_cassa =
       calculate_avg(stats->total_wait_time_cassa, stats->total_transactions);
+
+  double avg_leftover_primi = calculate_avg(
+      stats->total_plates_primi - stats->total_refilled_primi, total_days);
+  double avg_leftover_secondi = calculate_avg(
+      stats->total_plates_secondi - stats->total_refilled_secondi, total_days);
+  double avg_leftover_caffe = calculate_avg(
+      stats->total_plates_caffe - stats->total_refilled_caffe, total_days);
+
+  double avg_refill_primi =
+      calculate_avg(stats->total_refilled_primi, total_days);
+  double avg_refill_secondi =
+      calculate_avg(stats->total_refilled_secondi, total_days);
+  double avg_refill_caffe =
+      calculate_avg(stats->total_refilled_caffe, total_days);
 
   int len = asprintf(
       &buffer,
@@ -309,20 +365,31 @@ char *process_final_report(GlobalStats *stats, int total_days) {
       "Piatti Distribuiti:\n"
       "  - Primi: %d\n"
       "  - Secondi: %d\n"
-      "  - Caffè: %d\n" COLOR_CYAN
+      "  - Caffè: %d\n"
+      "Media di Avanzi al giorno:\n"
+      "  - Primi: %.2f\n"
+      "  - Secondi: %.2f\n"
+      "  - Caffè: %.2f\n"
+      "Media di Refill al giorno:\n"
+      "  - Primi: %.2f\n"
+      "  - Secondi: %.2f\n"
+      "  - Caffè: %.2f\n" COLOR_CYAN
       "======= Totali Accumulati =======\n" COLOR_RESET
       "Transazioni Totali: %d\n"
       "Ricavo Totale: %.2f€\n" COLOR_CYAN
-      "===== Tempi Medi Attesa (s) =====\n" COLOR_RESET "  - Primi:   %.4f s\n"
-      "  - Secondi: %.4f s\n"
-      "  - Caffè:   %.4f s\n"
-      "  - Cassa:   %.4f s\n" COLOR_BLUE
-      "================================" COLOR_RESET "\n",
+      "===== Tempi Medi Attesa (s) =====\n" COLOR_RESET "  - Primi:   %.5f s\n"
+      "  - Secondi: %.5f s\n"
+      "  - Caffè:   %.5f s\n"
+      "  - Cassa:   %.5f s\n" COLOR_BLUE
+      "================================" COLOR_RESET "\n\n",
       total_days, stats->total_users_served, stats->total_users_w_ticket,
       stats->total_users_served, stats->total_users_refused,
       stats->total_plates_primi, stats->total_plates_secondi,
-      stats->total_plates_caffe, stats->total_transactions,
-      stats->total_revenue, avg_p, avg_s, avg_c, avg_ca);
+      stats->total_plates_caffe, avg_leftover_primi, avg_leftover_secondi,
+      avg_leftover_caffe, avg_refill_primi, avg_refill_secondi,
+      avg_refill_caffe, stats->total_transactions, stats->total_revenue,
+      avg_wait_time_primi, avg_wait_time_secondi, avg_wait_time_caffe,
+      avg_wait_time_cassa);
 
   if (len == -1) {
     return NULL;
@@ -332,49 +399,60 @@ char *process_final_report(GlobalStats *stats, int total_days) {
 }
 
 void export_daily_stats_to_csv(DailyReport *report, const char *folder_path,
-                               const char *day_file_prefix,
-                               const char *final_file_prefix) {
 
-  double avg_p =
+                               const char *day_file_prefix,
+                               const char *final_file_prefix,
+                               const bool create_daily_single_files) {
+
+  double avg_wait_time_primi =
       calculate_avg(report->daily_wait_primi, report->daily_plates_primi);
-  double avg_s =
+  double avg_wait_time_secondi =
       calculate_avg(report->daily_wait_secondi, report->daily_plates_secondi);
-  double avg_c =
+  double avg_wait_time_caffe =
       calculate_avg(report->daily_wait_caffe, report->daily_plates_caffe);
-  double avg_ca =
+  double avg_wait_time_cassa =
       calculate_avg(report->daily_wait_cassa, report->daily_transactions);
 
-  char *day_path =
-      generate_csv_path(folder_path, day_file_prefix, report->day_number, 0);
-  if (ensure_folder_exists(day_path) != -1) {
-    FILE *f = fopen(day_path, "w");
-    if (f) {
-      fprintf(f, "%s", CSV_HEADER);
-      write_csv_row(f, "GIORNALIERO", report->day_number,
-                    report->daily_users_served, report->daily_users_refused,
-                    report->daily_plates_primi, report->daily_plates_secondi,
-                    report->daily_plates_caffe, report->daily_revenue, avg_p,
-                    avg_s, avg_c, avg_ca, report->daily_transactions,
-                    report->leftover_primi, report->leftover_secondi,
-                    report->leftover_caffe);
-      fclose(f);
-    } else {
-      LOG_ERR("STATS", "Errore creazione CSV daily '%s': %s", day_path,
-              strerror(errno));
+  if (create_daily_single_files) {
+    char *day_path =
+        generate_csv_path(folder_path, day_file_prefix, report->day_number, 0);
+    if (ensure_folder_exists(day_path) != -1) {
+      FILE *f = fopen(day_path, "w");
+      if (f) {
+        fprintf(f, "%s", CSV_HEADER);
+        write_csv_row(f, CSV_FORMAT_DAILY, "GIORNALIERO", report->day_number,
+                      report->daily_users_served, report->daily_users_refused,
+                      report->daily_users_w_ticket, report->daily_plates_primi,
+                      report->daily_plates_secondi, report->daily_plates_caffe,
+                      report->daily_revenue, avg_wait_time_primi,
+                      avg_wait_time_secondi, avg_wait_time_caffe,
+                      avg_wait_time_cassa, report->daily_transactions,
+                      report->leftover_primi, report->leftover_secondi,
+                      report->leftover_caffe, report->daily_refilled_primi,
+                      report->daily_refilled_secondi,
+                      report->daily_refilled_caffe);
+        fclose(f);
+      } else {
+        LOG_ERR("STATS", "Errore creazione CSV daily '%s': %s", day_path,
+                strerror(errno));
+      }
     }
+    free(day_path);
   }
-  free(day_path);
 
   if (final_file_prefix && strlen(final_file_prefix) > 0) {
     char *final_path = generate_csv_path(folder_path, final_file_prefix, 0, 1);
 
     append_stats_to_file(
-        final_path, "GIORNALIERO", report->day_number,
+        final_path, CSV_FORMAT_DAILY, "GIORNALIERO", report->day_number,
         report->daily_users_served, report->daily_users_refused,
-        report->daily_plates_primi, report->daily_plates_secondi,
-        report->daily_plates_caffe, report->daily_revenue, avg_p, avg_s, avg_c,
-        avg_ca, report->daily_transactions, report->leftover_primi,
-        report->leftover_secondi, report->leftover_caffe);
+        report->daily_users_w_ticket, report->daily_plates_primi,
+        report->daily_plates_secondi, report->daily_plates_caffe,
+        report->daily_revenue, avg_wait_time_primi, avg_wait_time_secondi,
+        avg_wait_time_caffe, avg_wait_time_cassa, report->daily_transactions,
+        report->leftover_primi, report->leftover_secondi,
+        report->leftover_caffe, report->daily_refilled_primi,
+        report->daily_refilled_secondi, report->daily_refilled_caffe);
 
     free(final_path);
   }
@@ -386,21 +464,38 @@ void export_final_stats_to_csv(GlobalStats *total_stats, const int total_days,
 
   char *final_path = generate_csv_path(folder_path, final_file_prefix, 0, 1);
 
-  double avg_p = calculate_avg(total_stats->total_wait_time_primi,
-                               total_stats->total_plates_primi);
-  double avg_s = calculate_avg(total_stats->total_wait_time_secondi,
-                               total_stats->total_plates_secondi);
-  double avg_c = calculate_avg(total_stats->total_wait_time_caffe,
-                               total_stats->total_plates_caffe);
-  double avg_ca = calculate_avg(total_stats->total_wait_time_cassa,
-                                total_stats->total_transactions);
+  double avg_wait_time_primi = calculate_avg(total_stats->total_wait_time_primi,
+                                             total_stats->total_plates_primi);
+  double avg_wait_time_secondi = calculate_avg(
+      total_stats->total_wait_time_secondi, total_stats->total_plates_secondi);
+  double avg_wait_time_caffe = calculate_avg(total_stats->total_wait_time_caffe,
+                                             total_stats->total_plates_caffe);
+  double avg_wait_time_cassa = calculate_avg(total_stats->total_wait_time_cassa,
+                                             total_stats->total_transactions);
+
+  double avg_leftover_primi =
+      calculate_avg(total_stats->total_leftover_primi, total_days);
+  double avg_leftover_secondi =
+      calculate_avg(total_stats->total_leftover_secondi, total_days);
+  double avg_leftover_caffe =
+      calculate_avg(total_stats->total_leftover_caffe, total_days);
+
+  double avg_refill_primi =
+      calculate_avg(total_stats->total_refilled_primi, total_days);
+  double avg_refill_secondi =
+      calculate_avg(total_stats->total_refilled_secondi, total_days);
+  double avg_refill_caffe =
+      calculate_avg(total_stats->total_refilled_caffe, total_days);
 
   append_stats_to_file(
-      final_path, "GLOBALE_FINALE", total_days, total_stats->total_users_served,
-      total_stats->total_users_refused, total_stats->total_plates_primi,
+      final_path, CSV_FORMAT_FINAL, "GLOBALE_FINALE", total_days,
+      total_stats->total_users_served, total_stats->total_users_refused,
+      total_stats->total_users_w_ticket, total_stats->total_plates_primi,
       total_stats->total_plates_secondi, total_stats->total_plates_caffe,
-      total_stats->total_revenue, avg_p, avg_s, avg_c, avg_ca,
-      total_stats->total_transactions, -1, -1, -1);
+      total_stats->total_revenue, avg_wait_time_primi, avg_wait_time_secondi,
+      avg_wait_time_caffe, avg_wait_time_cassa, total_stats->total_transactions,
+      avg_leftover_primi, avg_leftover_secondi, avg_leftover_caffe,
+      avg_refill_primi, avg_refill_secondi, avg_refill_caffe);
 
   LOG_INFO("STATS", "Statistiche finali (Globale) aggiunte su %s", final_path);
   free(final_path);

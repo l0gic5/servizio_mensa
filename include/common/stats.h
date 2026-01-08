@@ -19,6 +19,16 @@ typedef struct global_stats {
   double total_wait_time_caffe;
   double total_wait_time_cassa;
 
+  // leftover
+  int total_leftover_primi;
+  int total_leftover_secondi;
+  int total_leftover_caffe;
+
+  // refill
+  int total_refilled_primi;
+  int total_refilled_secondi;
+  int total_refilled_caffe;
+
   double total_revenue;
   int total_transactions;
 } GlobalStats;
@@ -43,6 +53,10 @@ typedef struct daily_report {
 
   double daily_revenue;
   int daily_transactions;
+
+  int daily_refilled_primi;
+  int daily_refilled_secondi;
+  int daily_refilled_caffe;
 
   // avanzi
   int leftover_primi;
@@ -85,7 +99,8 @@ char *process_final_report(GlobalStats *stats, int total_days);
  */
 void export_daily_stats_to_csv(DailyReport *report, const char *folder_path,
                                const char *day_file_prefix,
-                               const char *final_file_prefix);
+                               const char *final_file_prefix,
+                               const bool create_daily_single_files);
 
 /**
  * @brief Appende la riga globale al file finale.

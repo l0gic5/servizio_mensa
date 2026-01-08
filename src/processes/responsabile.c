@@ -27,9 +27,9 @@
 #include "common/stats.h"
 #include "common/types.h"
 
-#define PATH_OPERATORE "./bin/operatore"
-#define PATH_CASSA "./bin/cassa"
-#define PATH_UTENTE "./bin/utente"
+#define PATH_OPERATORE "./bin/processes/operatore"
+#define PATH_CASSA "./bin/processes/cassa"
+#define PATH_UTENTE "./bin/processes/utente"
 
 static int g_sem_id = -1;
 static int g_msg_id = -1;
@@ -51,7 +51,7 @@ static volatile sig_atomic_t g_shutdown = 0;
  * @brief Funzione di pulizia risorse (chiamata a fine main o signal handler)
  */
 void cleanup_resources(void) {
-  LOG_INFO("RESPONSABILE", "Avvio procedura di cleanup (inviato SIGTERM)...");
+  LOG_CONF("RESPONSABILE", "Avvio procedura di cleanup (inviato SIGTERM)...");
 
   signal(SIGTERM, SIG_IGN);
 
@@ -104,7 +104,7 @@ void cleanup_resources(void) {
   while (wait(NULL) > 0) {
   }
 
-  LOG_INFO("RESPONSABILE", "Cleanup completato. Terminazione.");
+  LOG_CONF("RESPONSABILE", "Cleanup completato. Terminazione.");
 }
 
 /**
@@ -227,9 +227,10 @@ pid_t spawn_process(const char *path, char *const argv[]) {
  * @param[out] w_caffe Puntatore dove scrivere il numero di worker assegnati al
  * Caffè.
  */
-void compute_workers_distribution(int available_workers, int t_primi,
-                                  int t_secondi, int t_caffe, int *w_primi,
-                                  int *w_secondi, int *w_caffe) {
+void compute_initial_workers_distribution(int available_workers, int t_primi,
+                                          int t_secondi, int t_caffe,
+                                          int *w_primi, int *w_secondi,
+                                          int *w_caffe) {
 
   if (available_workers < 3) {
     LOG_ERR("RESPONSABILE", "Troppi pochi worker! Configurazione impossibile.");
@@ -257,6 +258,119 @@ void compute_workers_distribution(int available_workers, int t_primi,
     }
     to_assign--;
   }
+}
+
+/**
+ * @brief Algoritmo Smart: Ricalcola i ruoli basandosi sullo stress reale.
+ * * Invece di usare solo le stime del config, guarda i tempi di attesa medi
+ * accumulati fino al giorno precedente. Assegna più risorse dove
+ * l'attesa è maggiore.
+ *
+ * @param available_workers Numero totale di worker disponibili (esclusa la
+ * cassa).
+ */
+void perform_dynamic_reconfiguration(int available_workers) {
+  sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
+
+  double wait_p =
+      (g_stats->total_plates_primi > 0)
+          ? g_stats->total_wait_time_primi / g_stats->total_plates_primi
+          : 0.0;
+
+  double wait_s =
+      (g_stats->total_plates_secondi > 0)
+          ? g_stats->total_wait_time_secondi / g_stats->total_plates_secondi
+          : 0.0;
+
+  double wait_c =
+      (g_stats->total_plates_caffe > 0)
+          ? g_stats->total_wait_time_caffe / g_stats->total_plates_caffe
+          : 0.0;
+
+  sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
+
+  // assegnazione minima garantita (1 per tipo)
+  int w_p = 1, w_s = 1, w_c = 1;
+  int remaining = available_workers - 3;
+
+  // fallback mancanza dati
+  if (wait_p == 0 && wait_s == 0 && wait_c == 0) {
+    wait_p = (double)g_config.avg_service_primi;
+    wait_s = (double)g_config.avg_service_secondi;
+    wait_c = (double)g_config.avg_service_caffe;
+  }
+
+  double total_wait = wait_p + wait_s + wait_c;
+
+  if (total_wait > 0) {
+    int extra_p = (int)((wait_p / total_wait) * remaining);
+    int extra_s = (int)((wait_s / total_wait) * remaining);
+    int extra_c = (int)((wait_c / total_wait) * remaining);
+
+    w_p += extra_p;
+    w_s += extra_s;
+    w_c += extra_c;
+
+    int assigned = extra_p + extra_s + extra_c;
+    int leftovers = remaining - assigned;
+
+    while (leftovers > 0) {
+      if (wait_p >= wait_s && wait_p >= wait_c) {
+        w_p++;
+        wait_p /= 2;
+      } else if (wait_s >= wait_p && wait_s >= wait_c) {
+        w_s++;
+        wait_s /= 2;
+      } else {
+        w_c++;
+        wait_c /= 2;
+      }
+      leftovers--;
+    }
+  } else {
+    while (remaining > 0) {
+      if (remaining > 0) {
+        w_p++;
+        remaining--;
+      }
+      if (remaining > 0) {
+        w_s++;
+        remaining--;
+      }
+      if (remaining > 0) {
+        w_c++;
+        remaining--;
+      }
+    }
+  }
+
+  sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
+
+  int active_cassa = g_worker_config->active_cassa;
+
+  int index = 1;
+
+  for (int k = 0; k < w_p; k++) {
+    g_worker_config->worker_roles[index++] = OP_PRIMI;
+  }
+  for (int k = 0; k < w_s; k++) {
+    g_worker_config->worker_roles[index++] = OP_SECONDI;
+  }
+  for (int k = 0; k < w_c; k++) {
+    g_worker_config->worker_roles[index++] = OP_CAFFE;
+  }
+
+  g_worker_config->active_primi = w_p;
+  g_worker_config->active_secondi = w_s;
+  g_worker_config->active_caffe = w_c;
+
+  sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
+
+  LOG_CONF(
+      "RESPONSABILE",
+      "Reconfig Smart (basata su attese): Cassa: %d, Primi:%d, Secondi:%d, "
+      "Caffè:%d",
+      active_cassa, w_p, w_s, w_c);
 }
 
 /**
@@ -298,21 +412,21 @@ void start_all_processes(const char *config_path) {
   int w_cassa = 1;
   int w_primi, w_secondi, w_caffe;
 
-  compute_workers_distribution(
+  compute_initial_workers_distribution(
       g_config.nof_workers - w_cassa, g_config.avg_service_primi,
       g_config.avg_service_secondi, g_config.avg_service_caffe, &w_primi,
       &w_secondi, &w_caffe);
 
-  sem_wait(g_sem_id, SEM_INDEX_MUTEX_STATS);
+  sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
 
   g_worker_config->active_primi = w_primi;
   g_worker_config->active_secondi = w_secondi;
   g_worker_config->active_caffe = w_caffe;
   g_worker_config->active_cassa = w_cassa;
 
-  sem_signal(g_sem_id, SEM_INDEX_MUTEX_STATS);
+  sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
 
-  LOG_INFO("RESPONSABILE",
+  LOG_CONF("RESPONSABILE",
            "Distribuzione Iniziale:\n  - Cassa: %d\n  - Primi: %d\n  - "
            "Secondi: %d\n  - Caffè: %d",
            w_cassa, w_primi, w_secondi, w_caffe);
@@ -340,10 +454,10 @@ void start_all_processes(const char *config_path) {
     g_child_pids[pid_index++] = spawn_process(PATH_UTENTE, args_utente);
   }
 
-  sem_wait(g_sem_id, SEM_INDEX_MUTEX_STATS);
+  sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
   g_worker_config->total_workers_count = g_config.nof_workers;
   g_worker_config->active_primi = w_primi;
-  sem_signal(g_sem_id, SEM_INDEX_MUTEX_STATS);
+  sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
 
   sleep((unsigned int)g_config.system_startup_delay_sec);
 
@@ -354,9 +468,9 @@ void start_all_processes(const char *config_path) {
  * @brief Gestisce stampa e export del report giornaliero calcolato.
  */
 void handle_daily_stats(DailyReport *report, GlobalStats *total_stats) {
-  sem_wait(g_sem_id, SEM_INDEX_MUTEX_STATS);
-  sem_wait(g_sem_id, SEM_INDEX_OUTPUT);
+  sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
 
+  sem_mutex_acquire(g_sem_id, SEM_INDEX_OUTPUT);
   char *daily_log = process_daily_report(report, total_stats);
   if (daily_log) {
     printf("%s", daily_log);
@@ -370,20 +484,20 @@ void handle_daily_stats(DailyReport *report, GlobalStats *total_stats) {
 
     export_daily_stats_to_csv(report, g_config.export_folder_path,
                               g_config.daily_reports_filename_csv,
-                              final_csv_name);
+                              final_csv_name,
+                              g_config.create_daily_single_files);
   }
 
-  sem_signal(g_sem_id, SEM_INDEX_OUTPUT);
-  sem_signal(g_sem_id, SEM_INDEX_MUTEX_STATS);
+  sem_mutex_release(g_sem_id, SEM_INDEX_OUTPUT);
+  sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
 }
 
 /**
  * @brief Gestisce stampa e export delle statistiche finali
  */
 void handle_final_stats(int days_completed) {
-  // protezione lettura statistiche
-  sem_wait(g_sem_id, SEM_INDEX_MUTEX_STATS);
-  sem_wait(g_sem_id, SEM_INDEX_OUTPUT);
+  sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
+  sem_mutex_acquire(g_sem_id, SEM_INDEX_OUTPUT);
 
   char *final_log = process_final_report(g_stats, days_completed);
   if (final_log) {
@@ -397,8 +511,8 @@ void handle_final_stats(int days_completed) {
                               g_config.final_stats_filename_csv);
   }
 
-  sem_signal(g_sem_id, SEM_INDEX_OUTPUT);
-  sem_signal(g_sem_id, SEM_INDEX_MUTEX_STATS);
+  sem_mutex_release(g_sem_id, SEM_INDEX_OUTPUT);
+  sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
 }
 
 /**
@@ -406,12 +520,7 @@ void handle_final_stats(int days_completed) {
  * Aggiunge porzioni fino al raggiungimento della capacità massima.
  */
 void perform_periodic_refill() {
-  if (sem_wait(g_sem_id, SEM_INDEX_MUTEX_STATS) == -1) {
-    if (errno != EINTR) {
-      LOG_ERR("RESPONSABILE", "Errore wait mutex refill");
-    }
-    return;
-  }
+  sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
 
   bool refilled = false;
 
@@ -426,6 +535,8 @@ void perform_periodic_refill() {
     }
 
     g_kitchen->remaining_primi = new_quantity;
+    g_stats->total_refilled_primi += new_quantity - current_primi;
+
     refilled = true;
   }
 
@@ -440,6 +551,7 @@ void perform_periodic_refill() {
     }
 
     g_kitchen->remaining_secondi = new_quantity;
+    g_stats->total_refilled_secondi += new_quantity - current_secondi;
     refilled = true;
   }
 
@@ -455,18 +567,9 @@ void perform_periodic_refill() {
     }
 
     g_kitchen->remaining_caffe = new_quantity;
+    g_stats->total_refilled_caffe += new_quantity - current_caffe;
     refilled = true;
   }
-
-  // rilascio MUTEX
-  sem_signal(g_sem_id, SEM_INDEX_MUTEX_STATS);
-
-  // LOG_INFO("RESPONSABILE",
-  //          "Refill eseguito. Stato cucina:\n  - %d Primi\n  - %d Secondi\n  -
-  //          "
-  //          "%d Caffè",
-  //          g_kitchen->remaining_primi, g_kitchen->remaining_secondi,
-  //          g_kitchen->remaining_caffe);
 
   if (refilled) {
     LOG_INFO("RESPONSABILE", "Refill periodico (%d min) eseguito.",
@@ -475,42 +578,14 @@ void perform_periodic_refill() {
   // else {
   //   LOG_INFO("RESPONSABILE", "Refill non necessario (cucina piena).");
   // }
-}
 
-/**
- * @brief Ricalcola e applica la distribuzione dei worker (dal giorno 2).
- */
-void perform_dynamic_reconfiguration(int available_workers) {
-  int w_cassa = 1;
-  int w_p, w_s, w_c;
-
-  // greedy
-  compute_workers_distribution(available_workers, g_config.avg_service_primi,
-                               g_config.avg_service_secondi,
-                               g_config.avg_service_caffe, &w_p, &w_s, &w_c);
-
-  sem_wait(g_sem_id, SEM_INDEX_MUTEX_STATS);
-
-  int index = 1; // salta cassa (index 0)
-  for (int k = 0; k < w_p; k++) {
-    g_worker_config->worker_roles[index++] = OP_PRIMI;
-  }
-  for (int k = 0; k < w_s; k++) {
-    g_worker_config->worker_roles[index++] = OP_SECONDI;
-  }
-  for (int k = 0; k < w_c; k++) {
-    g_worker_config->worker_roles[index++] = OP_CAFFE;
-  }
-
-  g_worker_config->active_primi = w_p;
-  g_worker_config->active_secondi = w_s;
-  g_worker_config->active_caffe = w_c;
-
-  sem_signal(g_sem_id, SEM_INDEX_MUTEX_STATS);
-
-  LOG_INFO("RESPONSABILE",
-           "Ruoli aggiornati: Cassa:%d, Primi:%d, Secondi:%d, Caffè:%d",
-           w_cassa, w_p, w_s, w_c);
+  // LOG_INFO("RESPONSABILE",
+  //          "Refill eseguito. Stato cucina:\n  - %d Primi\n  - %d Secondi\n  -
+  //          "
+  //          "%d Caffè",
+  //          g_kitchen->remaining_primi, g_kitchen->remaining_secondi,
+  //          g_kitchen->remaining_caffe);
+  sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
 }
 
 /**
@@ -584,7 +659,7 @@ void handle_day_end_sync() {
     }
   }
 
-  LOG_INFO("RESPONSABILE", "Attesa sincronizzazione da %d processi...",
+  LOG_CONF("RESPONSABILE", "Attesa sincronizzazione da %d processi...",
            active_children);
 
   // barrier wait (sincronizzazione fine giornata)
@@ -606,8 +681,10 @@ void handle_day_end_sync() {
       // CASO 2 => errore (timeout o errore critico)
       else {
         if (errno == EAGAIN) {
-          LOG_ERR("RESPONSABILE", "Timeout barriera fine giornata: un processo "
-                                  "non ha sincronizzato. Forzo shutdown.");
+          LOG_ERR("RESPONSABILE",
+                  "Timeout barriera fine giornata: il processo %d "
+                  "non ha sincronizzato. Forzo shutdown.",
+                  g_child_pids[i]);
         } else {
           LOG_ERR("RESPONSABILE", "Errore critico wait barriera");
         }
@@ -625,7 +702,7 @@ void handle_day_end_sync() {
     }
   }
 
-  LOG_INFO("RESPONSABILE", "Sincronizzazione completata.");
+  LOG_CONF("RESPONSABILE", "Sincronizzazione completata.");
 }
 
 /**
@@ -643,7 +720,7 @@ void run_simulation_loop(const char *config_path, int *day) {
     if ((*day) == 1) {
       start_all_processes(config_path);
     } else {
-      sem_wait(g_sem_id, SEM_INDEX_MUTEX_STATS);
+      sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
       g_kitchen->remaining_primi = g_config.max_porzioni_primi;
       g_kitchen->remaining_secondi = g_config.max_porzioni_secondi;
       g_kitchen->remaining_caffe = g_config.max_porzioni_caffe;
@@ -651,13 +728,13 @@ void run_simulation_loop(const char *config_path, int *day) {
       start_of_day_stats = *g_stats;
 
       g_worker_config->current_day = *day;
-      sem_signal(g_sem_id, SEM_INDEX_MUTEX_STATS);
+      sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
 
       // segnalo inizio giornata
       struct sembuf sb = {SEM_INDEX_DAY_CHANGE, 1, 0};
       semop(g_sem_id, &sb, 1);
 
-      LOG_INFO("RESPONSABILE", "Cucina rifornita (Day Start).");
+      LOG_CONF("RESPONSABILE", "Cucina rifornita (Day Start).");
     }
 
     if ((*day) > 1) {
@@ -670,9 +747,10 @@ void run_simulation_loop(const char *config_path, int *day) {
     if (g_shutdown) {
       LOG_WARN("RESPONSABILE", "Interruzione rilevata. Ripristino statistiche "
                                "all'ultimo giorno completo.");
-      sem_wait(g_sem_id, SEM_INDEX_MUTEX_STATS);
+      sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
       *g_stats = start_of_day_stats;
-      sem_signal(g_sem_id, SEM_INDEX_MUTEX_STATS);
+      sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
+
       break;
     }
 
@@ -682,9 +760,9 @@ void run_simulation_loop(const char *config_path, int *day) {
     if (g_shutdown) {
       LOG_WARN("RESPONSABILE",
                "Interruzione durante sync. Ripristino statistiche.");
-      sem_wait(g_sem_id, SEM_INDEX_MUTEX_STATS);
+      sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
       *g_stats = start_of_day_stats;
-      sem_signal(g_sem_id, SEM_INDEX_MUTEX_STATS);
+      sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
       break;
     }
 
@@ -692,10 +770,10 @@ void run_simulation_loop(const char *config_path, int *day) {
     memset(&report, 0, sizeof(DailyReport));
     report.day_number = (*day);
 
-    sem_wait(g_sem_id, SEM_INDEX_MUTEX_STATS);
+    sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
     GlobalStats end = *g_stats;
     KitchenState leftovers = *g_kitchen;
-    sem_signal(g_sem_id, SEM_INDEX_MUTEX_STATS);
+    sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
 
     // calcolo delta per DailyReport
     report.daily_users_served =
@@ -722,6 +800,13 @@ void run_simulation_loop(const char *config_path, int *day) {
     report.leftover_caffe =
         (leftovers.remaining_caffe > 0) ? leftovers.remaining_caffe : 0;
 
+    report.daily_refilled_primi =
+        end.total_refilled_primi - start_of_day_stats.total_refilled_primi;
+    report.daily_refilled_secondi =
+        end.total_refilled_secondi - start_of_day_stats.total_refilled_secondi;
+    report.daily_refilled_caffe =
+        end.total_refilled_caffe - start_of_day_stats.total_refilled_caffe;
+
     // delta tempi
     report.daily_wait_primi =
         end.total_wait_time_primi - start_of_day_stats.total_wait_time_primi;
@@ -731,6 +816,12 @@ void run_simulation_loop(const char *config_path, int *day) {
         end.total_wait_time_caffe - start_of_day_stats.total_wait_time_caffe;
     report.daily_wait_cassa =
         end.total_wait_time_cassa - start_of_day_stats.total_wait_time_cassa;
+
+    sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
+    g_stats->total_leftover_primi += report.leftover_primi;
+    g_stats->total_leftover_secondi += report.leftover_secondi;
+    g_stats->total_leftover_caffe += report.leftover_caffe;
+    sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
 
     handle_daily_stats(&report, g_stats);
 
@@ -767,7 +858,7 @@ int main(int argc, char *argv[]) {
     g_config.n_nanosecs_as_minute = 1000000;
   }
 
-  LOG_INFO("RESPONSABILE", "Configurazione `%s` caricata. Durata: %d gg",
+  LOG_CONF("RESPONSABILE", "Configurazione `%s` caricata. Durata: %d gg",
            config_path, g_config.simulation_duration_days);
 
   if (setup_ipc(&g_stats) == -1) {
@@ -777,15 +868,15 @@ int main(int argc, char *argv[]) {
   }
 
   // MUTEX non necessario perché per ora non è memoria competitiva
-  // sem_wait(g_sem_id, SEM_INDEX_MUTEX_STATS);
+  // sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
 
   g_kitchen->remaining_primi = g_config.max_porzioni_primi;
   g_kitchen->remaining_secondi = g_config.max_porzioni_secondi;
   g_kitchen->remaining_caffe = g_config.max_porzioni_caffe;
 
-  // sem_signal(g_sem_id, SEM_INDEX_MUTEX_STATS);
+  // sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
 
-  LOG_INFO(
+  LOG_CONF(
       "RESPONSABILE",
       "Rifornimento iniziale completato:\n  - %d Primi\n  - %d Secondi\n  - "
       "%d Caffè",

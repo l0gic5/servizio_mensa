@@ -228,6 +228,9 @@ static void apply_config_parameter(Config *config, const char *key,
   } else if (strcmp(key, "EXPORT_DAILY_REPORTS_CSV") == 0) {
     config->export_daily_reports_csv =
         (strcmp(value, "true") == 0 || strcmp(value, "1") == 0);
+  } else if (strcmp(key, "CREATE_DAILY_SINGLE_FILES") == 0) {
+    config->create_daily_single_files =
+    (strcmp(value, "true") == 0 || strcmp(value, "1") == 0);
   } else if (strcmp(key, "DAILY_REPORTS_FILENAME_CSV") == 0) {
     strncpy(config->daily_reports_filename_csv, value,
             sizeof(config->daily_reports_filename_csv) - 1);
@@ -327,7 +330,8 @@ static void set_default_values(Config *config) {
   strncpy(config->export_folder_path, "reports/",
           sizeof(config->export_folder_path) - 1);
 
-  config->export_daily_reports_csv = false;
+  config->export_daily_reports_csv = true;
+  config->create_daily_single_files = false;
   strncpy(config->daily_reports_filename_csv, "days/daily_report",
           sizeof(config->daily_reports_filename_csv) - 1);
 

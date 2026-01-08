@@ -175,4 +175,20 @@ int receive_message(int msg_id, void *msg, size_t size, long msg_type,
  */
 int remove_msg_queue(int msg_id);
 
+/**
+ * @brief Acquisisce un mutex basato su semaforo.
+ *
+ * @param sem_id ID del set di semafori
+ * @param sem_num Indice del semaforo mutex
+ */
+void sem_mutex_acquire(int sem_id, int sem_num);
+
+/**
+ * @brief Rilascia un mutex basato su semaforo.
+ *
+ * @param sem_id ID del set di semafori
+ * @param sem_num Indice del semaforo mutex
+ */
+void sem_mutex_release(int sem_id, int sem_num);
+
 #endif
