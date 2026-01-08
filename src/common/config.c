@@ -222,6 +222,23 @@ static void apply_config_parameter(Config *config, const char *key,
     config->default_sciopero_stop_duration = atoi(value);
   }
 
+  else if (strcmp(key, "EXPORT_FOLDER_PATH") == 0) {
+    strncpy(config->export_folder_path, value,
+            sizeof(config->export_folder_path) - 1);
+  } else if (strcmp(key, "EXPORT_DAILY_REPORTS_CSV") == 0) {
+    config->export_daily_reports_csv =
+        (strcmp(value, "true") == 0 || strcmp(value, "1") == 0);
+  } else if (strcmp(key, "DAILY_REPORTS_FILENAME_CSV") == 0) {
+    strncpy(config->daily_reports_filename_csv, value,
+            sizeof(config->daily_reports_filename_csv) - 1);
+  } else if (strcmp(key, "EXPORT_FINAL_STATS_CSV") == 0) {
+    config->export_final_stats_csv =
+        (strcmp(value, "true") == 0 || strcmp(value, "1") == 0);
+  } else if (strcmp(key, "FINAL_STATS_FILENAME_CSV") == 0) {
+    strncpy(config->final_stats_filename_csv, value,
+            sizeof(config->final_stats_filename_csv) - 1);
+  }
+
   else {
     LOG_WARN("CONFIG", "Chiave sconosciuta riga %d: %s", line_num, key);
   }
@@ -287,10 +304,10 @@ static void set_default_values(Config *config) {
 
   // tickets
   if (config->ticket_reader_capacity == 0) {
-    config->ticket_reader_capacity = 2;
+    config->ticket_reader_capacity = 4;
   }
   if (config->ticket_reader_timeout_ns == 0) {
-    config->ticket_reader_timeout_ns = 500000000;
+    config->ticket_reader_timeout_ns = 750000000;
   }
 
   // postazioni fisiche
@@ -374,16 +391,16 @@ static void set_default_values(Config *config) {
 
   // comportamento
   if (config->user_queue_timeout_sec == 0) {
-    config->user_queue_timeout_sec = 2;
+    config->user_queue_timeout_sec = 5;
   }
   if (config->user_meal_duration_ns == 0) {
     config->user_meal_duration_ns = 2000000000;
   }
   if (config->user_coffee_duration_ns == 0) {
-    config->user_coffee_duration_ns = 500000000;
+    config->user_coffee_duration_ns = 10000000;
   }
   if (config->user_max_arrival_delay_us == 0) {
-    config->user_max_arrival_delay_us = 5000000;
+    config->user_max_arrival_delay_us = 10000000;
   }
   // preferenze
   if (config->probability_user_wants_primo == 0) {
@@ -441,6 +458,31 @@ static void set_default_values(Config *config) {
 
   if (config->default_sciopero_stop_duration == 0) {
     config->default_sciopero_stop_duration = 60;
+  }
+
+  if (strlen(config->export_folder_path) == 0) {
+    strncpy(config->export_folder_path, "reports/",
+            sizeof(config->export_folder_path) - 1);
+    config->export_folder_path[sizeof(config->export_folder_path) - 1] = '\0';
+  }
+
+  if (config->export_daily_reports_csv == false) {
+    config->export_daily_reports_csv = false;
+  }
+  if (strlen(config->daily_reports_filename_csv) == 0) {
+    strncpy(config->daily_reports_filename_csv, "days/daily_report",
+            sizeof(config->daily_reports_filename_csv) - 1);
+    config->daily_reports_filename_csv[sizeof(config->daily_reports_filename_csv) - 1] =
+        '\0';
+  }
+  if (config->export_final_stats_csv == false) {
+    config->export_final_stats_csv = false;
+  }
+  if (strlen(config->final_stats_filename_csv) == 0) {
+    strncpy(config->final_stats_filename_csv, "final_stats",
+            sizeof(config->final_stats_filename_csv) - 1);
+    config->final_stats_filename_csv[sizeof(config->final_stats_filename_csv) -
+                                     1] = '\0';
   }
 }
 

@@ -1,0 +1,2 @@
+Tipo,Giorno,Utenti_Serviti,Utenti_Respinti,Primi,Secondi,Caffe,Ricavo,Attesa_Primi,Attesa_Secondi,Attesa_Caffe,Attesa_Cassa,Transazioni,Leftover_Primi,Leftover_Secondi,Leftover_Caffe
+GIORNALIERO,2,93,14,34,43,16,453.25,0.1592,0.1876,0.0489,0.1272,60,48,48,1000

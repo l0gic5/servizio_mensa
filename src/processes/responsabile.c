@@ -24,6 +24,7 @@
 #include "common/config.h"
 #include "common/ipc_utils.h"
 #include "common/logger.h"
+#include "common/stats.h"
 #include "common/types.h"
 
 #define PATH_OPERATORE "./bin/operatore"
@@ -51,6 +52,8 @@ static volatile sig_atomic_t g_shutdown = 0;
  */
 void cleanup_resources(void) {
   LOG_INFO("RESPONSABILE", "Avvio procedura di cleanup (inviato SIGTERM)...");
+
+  signal(SIGTERM, SIG_IGN);
 
   if (g_child_pids) {
     for (int i = 0; i < g_total_children; i++) {
@@ -97,6 +100,9 @@ void cleanup_resources(void) {
 
   // per utenti generati dinamicamente
   kill(0, SIGTERM);
+
+  while (wait(NULL) > 0) {
+  }
 
   LOG_INFO("RESPONSABILE", "Cleanup completato. Terminazione.");
 }
@@ -345,87 +351,51 @@ void start_all_processes(const char *config_path) {
 }
 
 /**
- * @brief Stampa il report giornaliero calcolato.
+ * @brief Gestisce stampa e export del report giornaliero calcolato.
  */
-void print_daily_stats(DailyReport *report, GlobalStats *total_stats) {
-  double avg_primi = (report->daily_plates_primi > 0)
-                         ? report->daily_wait_primi / report->daily_plates_primi
-                         : 0.0;
-  double avg_secondi =
-      (report->daily_plates_secondi > 0)
-          ? report->daily_wait_secondi / report->daily_plates_secondi
-          : 0.0;
-  double avg_caffe = (report->daily_plates_caffe > 0)
-                         ? report->daily_wait_caffe / report->daily_plates_caffe
-                         : 0.0;
-
+void handle_daily_stats(DailyReport *report, GlobalStats *total_stats) {
+  sem_wait(g_sem_id, SEM_INDEX_MUTEX_STATS);
   sem_wait(g_sem_id, SEM_INDEX_OUTPUT);
 
-  printf("\n" COLOR_BLUE "========== REPORT GIORNO %d ==========" COLOR_RESET
-         "\n",
-         report->day_number);
-  printf("Utenti Serviti:   %d\n", report->daily_users_served);
-  printf("Utenti Respinti:  %d\n", report->daily_users_refused);
-  printf("Piatti Distribuiti:\n");
-  printf("  - Primi:   %d (Avanzi: %d)\n", report->daily_plates_primi,
-         report->leftover_primi);
-  printf("  - Secondi: %d (Avanzi: %d)\n", report->daily_plates_secondi,
-         report->leftover_secondi);
-  printf("  - Caffè:   %d\n", report->daily_plates_caffe);
-  printf("Ricavo Giornata:  %.2f€\n", report->daily_revenue);
+  char *daily_log = process_daily_report(report, total_stats);
+  if (daily_log) {
+    printf("%s", daily_log);
+    free(daily_log);
+  }
 
-  printf(COLOR_CYAN "======== Totali Accumulati =========\n" COLOR_RESET);
-  printf("Totale Serviti:   %d\n", total_stats->total_users_served);
-  printf("Totale Ricavi:    %.2f€\n", total_stats->total_revenue);
+  if (g_config.export_daily_reports_csv) {
+    const char *final_csv_name = g_config.export_final_stats_csv
+                                     ? g_config.final_stats_filename_csv
+                                     : NULL;
 
-  printf(COLOR_CYAN "====== Tempi Medi Attesa (s) =======\n" COLOR_RESET);
-  printf("  - Primi:   %.4f s\n", avg_primi);
-  printf("  - Secondi: %.4f s\n", avg_secondi);
-  printf("  - Caffè:   %.4f s\n", avg_caffe);
-
-  printf(COLOR_BLUE "====================================" COLOR_RESET "\n\n");
+    export_daily_stats_to_csv(report, g_config.export_folder_path,
+                              g_config.daily_reports_filename_csv,
+                              final_csv_name);
+  }
 
   sem_signal(g_sem_id, SEM_INDEX_OUTPUT);
+  sem_signal(g_sem_id, SEM_INDEX_MUTEX_STATS);
 }
 
 /**
- * @brief Stampa le statistiche finali
+ * @brief Gestisce stampa e export delle statistiche finali
  */
-void print_final_stats(int days_completed) {
+void handle_final_stats(int days_completed) {
   // protezione lettura statistiche
   sem_wait(g_sem_id, SEM_INDEX_MUTEX_STATS);
   sem_wait(g_sem_id, SEM_INDEX_OUTPUT);
 
-  double avg_primi =
-      (g_stats->total_plates_primi > 0)
-          ? g_stats->total_wait_time_primi / g_stats->total_plates_primi
-          : 0.0;
-  double avg_secondi =
-      (g_stats->total_plates_secondi > 0)
-          ? g_stats->total_wait_time_secondi / g_stats->total_plates_secondi
-          : 0.0;
-  double avg_caffe =
-      (g_stats->total_plates_caffe > 0)
-          ? g_stats->total_wait_time_caffe / g_stats->total_plates_caffe
-          : 0.0;
+  char *final_log = process_final_report(g_stats, days_completed);
+  if (final_log) {
+    printf("%s", final_log);
+    free(final_log);
+  }
 
-  printf("\n" COLOR_BLUE "======== REPORT FINALE =========" COLOR_RESET "\n");
-  printf("Giorni Completati: %d\n", days_completed);
-  printf("Piatti Serviti in totale: %d\n", g_stats->total_users_served);
-  printf("Utenti Respinti/Overload: %d\n", g_stats->total_users_refused);
-  printf("Piatti Distribuiti:\n  - Primi: %d\n  - Secondi: %d\n  - Caffè: %d\n",
-         g_stats->total_plates_primi, g_stats->total_plates_secondi,
-         g_stats->total_plates_caffe);
-
-  printf(COLOR_CYAN "======= Totali Accumulati =======\n" COLOR_RESET);
-  printf("Transazioni Totali: %d\n", g_stats->total_transactions);
-  printf("Ricavo Totale: %.2f€\n", g_stats->total_revenue);
-
-  printf(COLOR_CYAN "===== Tempi Medi Attesa (s) =====\n" COLOR_RESET);
-  printf("  - Primi:   %.4f s\n", avg_primi);
-  printf("  - Secondi: %.4f s\n", avg_secondi);
-  printf("  - Caffè:   %.4f s\n", avg_caffe);
-  printf(COLOR_BLUE "================================" COLOR_RESET "\n\n");
+  if (g_config.export_final_stats_csv) {
+    export_final_stats_to_csv(g_stats, days_completed,
+                              g_config.export_folder_path,
+                              g_config.final_stats_filename_csv);
+  }
 
   sem_signal(g_sem_id, SEM_INDEX_OUTPUT);
   sem_signal(g_sem_id, SEM_INDEX_MUTEX_STATS);
@@ -698,6 +668,11 @@ void run_simulation_loop(const char *config_path, int *day) {
     simulate_day_cycle();
 
     if (g_shutdown) {
+      LOG_WARN("RESPONSABILE", "Interruzione rilevata. Ripristino statistiche "
+                               "all'ultimo giorno completo.");
+      sem_wait(g_sem_id, SEM_INDEX_MUTEX_STATS);
+      *g_stats = start_of_day_stats;
+      sem_signal(g_sem_id, SEM_INDEX_MUTEX_STATS);
       break;
     }
 
@@ -705,6 +680,11 @@ void run_simulation_loop(const char *config_path, int *day) {
     handle_day_end_sync();
 
     if (g_shutdown) {
+      LOG_WARN("RESPONSABILE",
+               "Interruzione durante sync. Ripristino statistiche.");
+      sem_wait(g_sem_id, SEM_INDEX_MUTEX_STATS);
+      *g_stats = start_of_day_stats;
+      sem_signal(g_sem_id, SEM_INDEX_MUTEX_STATS);
       break;
     }
 
@@ -730,11 +710,15 @@ void run_simulation_loop(const char *config_path, int *day) {
         end.total_plates_caffe - start_of_day_stats.total_plates_caffe;
     report.daily_revenue = end.total_revenue - start_of_day_stats.total_revenue;
 
+    report.daily_transactions =
+        end.total_transactions - start_of_day_stats.total_transactions;
+
     report.leftover_primi =
         (leftovers.remaining_primi > 0) ? leftovers.remaining_primi : 0;
     report.leftover_secondi =
         (leftovers.remaining_secondi > 0) ? leftovers.remaining_secondi : 0;
-    report.leftover_caffe = leftovers.remaining_caffe;
+    report.leftover_caffe =
+        (leftovers.remaining_caffe > 0) ? leftovers.remaining_caffe : 0;
 
     // delta tempi
     report.daily_wait_primi =
@@ -743,8 +727,10 @@ void run_simulation_loop(const char *config_path, int *day) {
                                 start_of_day_stats.total_wait_time_secondi;
     report.daily_wait_caffe =
         end.total_wait_time_caffe - start_of_day_stats.total_wait_time_caffe;
+    report.daily_wait_cassa =
+        end.total_wait_time_cassa - start_of_day_stats.total_wait_time_cassa;
 
-    print_daily_stats(&report, &end);
+    handle_daily_stats(&report, g_stats);
 
     // aggiorno snapshot per domani
     start_of_day_stats = end;
@@ -808,7 +794,7 @@ int main(int argc, char *argv[]) {
 
   run_simulation_loop(config_path, &day_counter);
 
-  print_final_stats(--day_counter);
+  handle_final_stats(day_counter - 1);
   cleanup_resources();
 
   return 0;

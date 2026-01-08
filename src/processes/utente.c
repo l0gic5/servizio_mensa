@@ -23,6 +23,7 @@
 #include "common/ipc_utils.h"
 #include "common/logger.h"
 #include "common/types.h"
+#include "common/stats.h"
 
 static int g_sem_id = -1;
 static int g_msg_id = -1;

@@ -50,7 +50,7 @@ typedef struct worker_config {
 } WorkerConfig;
 
 ///////////////////
-//  STATISTICHE  //
+//  DATA STATES  //
 ///////////////////
 
 typedef struct kitchen_state {
@@ -58,51 +58,6 @@ typedef struct kitchen_state {
   int remaining_secondi;
   int remaining_caffe;
 } KitchenState;
-
-typedef struct global_stats {
-  int total_users_served;
-  int total_users_refused;
-
-  // piatti distribuiti
-  int total_plates_primi;
-  int total_plates_secondi;
-  int total_plates_caffe;
-
-  // accumulatori tempo di attesa
-  double total_wait_time_primi;
-  double total_wait_time_secondi;
-  double total_wait_time_caffe;
-  double total_wait_time_cassa;
-
-  double total_revenue;
-  int total_transactions;
-} GlobalStats;
-
-typedef struct daily_report {
-  int day_number;
-
-  // delta (oggi - ieri)
-  int daily_users_served;
-  int daily_users_refused;
-
-  int daily_plates_primi;
-  int daily_plates_secondi;
-  int daily_plates_caffe;
-
-  // delta tempi attesa
-  double daily_wait_primi;
-  double daily_wait_secondi;
-  double daily_wait_caffe;
-  double daily_wait_cassa;
-
-  double daily_revenue;
-  int daily_transactions;
-
-  // avanzi
-  int leftover_primi;
-  int leftover_secondi;
-  int leftover_caffe;
-} DailyReport;
 
 /////////////////////////////////
 //  MESSAGGIO (msgsnd/msgrcv)  //
