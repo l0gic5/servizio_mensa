@@ -14,6 +14,7 @@
 #define COLOR_PURPLE "\x1b[35m"
 #define COLOR_PINK "\x1b[95m"
 #define COLOR_CYAN "\x1b[36m"
+#define COLOR_ORANGE "\x1b[38;5;208m"
 #define COLOR_RESET "\x1b[0m"
 
 #define FLUSH_LOGS                                                             \
@@ -28,6 +29,12 @@
             COLOR_RED "%s:%d: PID=%5d: Errore %d (%s)" COLOR_RESET "\n",       \
             __FILE__, __LINE__, getpid(), errno, strerror(errno));             \
   }
+
+#define LOG_DEBUG(ctx, msg, ...)                                               \
+  fprintf(stdout,                                                              \
+          COLOR_ORANGE "[%s]" COLOR_PURPLE "(%d) " COLOR_ORANGE                \
+                       "DEBUG: " msg COLOR_RESET "\n",                         \
+          ctx, getpid(), ##__VA_ARGS__)
 
 #define EXIT_ON_ERROR                                                          \
   if (errno) {                                                                 \

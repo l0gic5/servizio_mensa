@@ -487,8 +487,8 @@ void start_all_processes(const char *config_path) {
  */
 void handle_daily_stats(DailyReport *report, GlobalStats *total_stats) {
   sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
-
   sem_mutex_acquire(g_sem_id, SEM_INDEX_OUTPUT);
+
   char *daily_log = process_daily_report(report, total_stats);
   if (daily_log) {
     printf("%s", daily_log);
@@ -899,20 +899,20 @@ void run_simulation_loop(const char *config_path, int *day) {
     sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
     GlobalStats end_of_day_stats = *g_stats;
     KitchenState leftovers = *g_kitchen;
-
-    g_stats->total_leftover_primi +=
-        (leftovers.remaining_primi > 0) ? leftovers.remaining_primi : 0;
-    g_stats->total_leftover_secondi +=
-        (leftovers.remaining_secondi > 0) ? leftovers.remaining_secondi : 0;
-    g_stats->total_leftover_caffe +=
-        (leftovers.remaining_caffe > 0) ? leftovers.remaining_caffe : 0;
-
     sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
 
     // report
     DailyReport report;
     compute_daily_report(&report, *day, &start_of_day_stats, &end_of_day_stats,
                          &leftovers);
+
+    sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
+    g_stats->total_leftover_primi += report.leftover_primi;
+    g_stats->total_leftover_secondi += report.leftover_secondi;
+    g_stats->total_leftover_caffe += report.leftover_caffe;
+
+    start_of_day_stats = *g_stats;
+    sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
 
     handle_daily_stats(&report, g_stats);
 
