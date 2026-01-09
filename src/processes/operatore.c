@@ -212,16 +212,62 @@ void set_role_parameters(OpType role, const Config *config,
 }
 
 /**
+ * @brief Helper per aggiornare il conteggio operatori attivi in mutua
+ * esclusione.
+ *
+ * @warning Non gestisce MUTEX
+ *
+ * @param role Il ruolo dell'operatore.
+ * @param delta +1 per incrementare, -1 per decrementare.
+ * @return Il nuovo valore del contatore aggiornato.
+ */
+int update_active_count(OpType role, int delta) {
+  int current_val = 0;
+  switch (role) {
+  case OP_PRIMI:
+    g_worker_config->active_primi += delta;
+    current_val = g_worker_config->active_primi;
+    break;
+  case OP_SECONDI:
+    g_worker_config->active_secondi += delta;
+    current_val = g_worker_config->active_secondi;
+    break;
+  case OP_CAFFE:
+    g_worker_config->active_caffe += delta;
+    current_val = g_worker_config->active_caffe;
+    break;
+  case OP_CASSA:
+    g_worker_config->active_cassa += delta;
+    current_val = g_worker_config->active_cassa;
+    break;
+  }
+  return current_val;
+}
+
+/**
+ * @brief Legge il valore attuale senza modificarlo.
+ */
+int get_active_count(OpType role) {
+  switch (role) {
+  case OP_PRIMI:
+    return g_worker_config->active_primi;
+  case OP_SECONDI:
+    return g_worker_config->active_secondi;
+  case OP_CAFFE:
+    return g_worker_config->active_caffe;
+  case OP_CASSA:
+    return g_worker_config->active_cassa;
+  default:
+    return 0;
+  }
+}
+
+/**
  * @brief Tenta di effettuare una pausa lavorativa.
  *
  * Controlla se il numero massimo di pause è stato raggiunto. In caso contrario,
  * valuta una probabilità di pausa. Se la pausa avviene, l'operatore rilascia
  * la postazione (signal), va in sleep, e poi tenta di riacquisirla (wait).
- *
- * @note **TOCTOU (Time Of Check to Time Of Use):** L'uso di valori statistici
- * o controlli non atomici prima di un'azione in concorrenza può generare
- * race conditions. In questa simulazione didattica, il rischio viene messo in
- * conto e tollerato...
  *
  * @param sem_id ID del set di semafori.
  * @param sem_workstation_index Indice del semaforo della postazione corrente.
@@ -231,106 +277,67 @@ void set_role_parameters(OpType role, const Config *config,
  */
 void attempt_pause(int sem_id, int sem_workstation_index, int *pauses_done,
                    OpType role, Config config) {
+
   if (*pauses_done >= config.max_pauses_per_day) {
     return;
   }
 
-  // `pause_probability_percent` di probabilità di fare pausa
-  if (random_probability(config.pause_probability_percent, rand)) {
-    // TOCTOU (Time Of Check to Time Of Use) => possibile Race Condition !!
-    // ACCETTABILE !!
-    // == il processo potrebbe essere prelevato dalla CPU tra il check e il wait
+  if (!random_probability(config.pause_probability_percent, rand)) {
+    return;
+  }
+
+  sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
+
+  int active = get_active_count(role);
+
+  if (active <= 1) {
+    sem_mutex_release(sem_id, SEM_INDEX_MUTEX_STATS);
+    LOG_INFO(log_tag, "Pausa negata: unico operatore attivo per %s",
+             ROLE_NAME(role));
+    return;
+  }
+
+  update_active_count(role, -1);
+
+  sem_mutex_release(sem_id, SEM_INDEX_MUTEX_STATS);
+
+  LOG_INFO(log_tag, "Pausa %d/%d (Ruolo %s) - Rilascio postazione...",
+           *pauses_done + 1, config.max_pauses_per_day, ROLE_NAME(role));
+
+  if (sem_signal(sem_id, sem_workstation_index) == -1) {
+
+    LOG_ERR(log_tag,
+            "Errore critico sem_signal durante pausa! Eseguo ROLLBACK.");
 
     sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
+    update_active_count(role, +1);
+    sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
 
-    int active = 0;
-    switch (role) {
-    case OP_PRIMI:
-      active = g_worker_config->active_primi;
-      break;
-    case OP_SECONDI:
-      active = g_worker_config->active_secondi;
-      break;
-    case OP_CAFFE:
-      active = g_worker_config->active_caffe;
-      break;
-    case OP_CASSA:
-      // superfluo, ma per coerenza
-      active = g_worker_config->active_cassa;
-      break;
-    }
+    return;
+  }
 
-    // SE ultimo rimasto (active <= 1), niente pausa
-    if (active <= 1) {
-      sem_mutex_release(sem_id, SEM_INDEX_MUTEX_STATS);
-      LOG_INFO(log_tag, "Pausa negata: unico operatore attivo per %s",
-               ROLE_NAME(role));
-      return;
-    }
+  struct timespec t_pause = {0, (long)config.pause_duration_ns};
+  nanosleep(&t_pause, NULL);
 
-    switch (role) {
-    case OP_PRIMI:
-      g_worker_config->active_primi--;
-      break;
-    case OP_SECONDI:
-      g_worker_config->active_secondi--;
-      break;
-    case OP_CAFFE:
-      g_worker_config->active_caffe--;
-      break;
-    case OP_CASSA:
-      // superfluo, ma per coerenza
-      g_worker_config->active_cassa--;
+  (*pauses_done)++;
+
+  LOG_INFO(log_tag, "Fine pausa. Attendo rientro in postazione...");
+
+  while (g_running) {
+    if (sem_wait(sem_id, sem_workstation_index) == 0) {
       break;
     }
-    sem_mutex_release(sem_id, SEM_INDEX_MUTEX_STATS);
-
-    LOG_INFO(log_tag, "Pausa %d/%d (Ruolo %s)", *pauses_done + 1,
-             config.max_pauses_per_day, ROLE_NAME(role));
-
-    // lascia il posto alla workstation
-    if (sem_signal(sem_id, sem_workstation_index) == -1) {
-      return;
+    if (errno != EINTR) {
+      LOG_ERR(log_tag, "Errore sem_wait al rientro dalla pausa");
+      g_running = 0;
+      break;
     }
+  }
 
-    // wait
-    struct timespec t_pause = {0, (long)config.pause_duration_ns};
-    nanosleep(&t_pause, NULL);
-    (*pauses_done)++;
-
-    LOG_INFO(log_tag, "Fine pausa. Attendo postazione...");
-
-    // Attendo postazione fisica per rientrare
-    while (g_running) {
-      if (sem_wait(sem_id, sem_workstation_index) == 0) {
-        break;
-      }
-      if (errno != EINTR) {
-        g_running = 0;
-        break;
-      }
-    }
-
-    // fine pausa
+  if (g_running) {
     sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
-
-    switch (role) {
-    case OP_PRIMI:
-      g_worker_config->active_primi++;
-      break;
-    case OP_SECONDI:
-      g_worker_config->active_secondi++;
-      break;
-    case OP_CAFFE:
-      g_worker_config->active_caffe++;
-      break;
-    case OP_CASSA:
-      // superfluo, ma per coerenza
-      g_worker_config->active_cassa++;
-      break;
-    }
-
-    sem_mutex_release(sem_id, SEM_INDEX_MUTEX_STATS);
+    update_active_count(role, +1);
+    sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
 
     LOG_INFO(log_tag, "Rientrato in servizio.");
   }
