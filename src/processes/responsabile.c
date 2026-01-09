@@ -723,100 +723,140 @@ void handle_day_end_sync() {
   LOG_CONF("RESPONSABILE", "Sincronizzazione completata.");
 }
 
-// /**
-//  * @brief Prepara l'inizio della giornata: rifornisce cucina e invia segnale.
-//  *
-//  * @param day Numero del giorno corrente.
-//  * @param snapshot Puntatore allo snapshot delle statistiche a inizio
-//  giornata
-//  * (Output param).
-//  */
-// static void prepare_day_start(int day, GlobalStats *snapshot) {
-//   sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
+///////////////////////
+//  SIMULATION LOOP  //
+///////////////////////
 
-//   // rifornimento
-//   g_kitchen->remaining_primi = g_config.max_porzioni_primi;
-//   g_kitchen->remaining_secondi = g_config.max_porzioni_secondi;
-//   g_kitchen->remaining_caffe = g_config.max_porzioni_caffe;
+/**
+ * @brief Prepara la cucina e prende uno snapshot delle statistiche.
+ *
+ * @param day Giorno corrente.
+ * @param start_snapshot Puntatore dove salvare lo snapshot delle statistiche.
+ */
+static void setup_day_start(int day, GlobalStats *start_snapshot) {
+  sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
 
-//   // snapshot per calcolo delta
-//   *snapshot = *g_stats;
-//   g_worker_config->current_day = day;
+  // refill
+  if (day > 1) {
+    g_kitchen->remaining_primi = g_config.max_porzioni_primi;
+    g_kitchen->remaining_secondi = g_config.max_porzioni_secondi;
+    g_kitchen->remaining_caffe = g_config.max_porzioni_caffe;
+    LOG_CONF("RESPONSABILE", "Cucina rifornita (Day Start).");
+  }
 
-//   sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
+  *start_snapshot = *g_stats;
 
-//   // segnalazione IPC
-//   struct sembuf sb = {SEM_INDEX_DAY_CHANGE, 1, 0};
-//   semop(g_sem_id, &sb, 1);
+  // SHM sets
+  g_worker_config->current_day = day;
 
-//   LOG_CONF("RESPONSABILE", "Giorno %d: Cucina rifornita e segnale inviato.",
-//            day);
-// }
+  sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
+}
 
-// /**
-//  * @brief Calcola il report giornaliero basandosi sugli snapshot.
-//  *
-//  * @param report Puntatore al DailyReport da popolare.
-//  * @param start Puntatore allo snapshot delle statistiche a inizio giornata.
-//  * @param end Puntatore allo snapshot delle statistiche a fine giornata.
-//  * @param leftovers Puntatore allo stato della cucina a fine giornata.
-//  */
-// static void compute_daily_report(DailyReport *report, const GlobalStats
-// *start,
-//                                  const GlobalStats *end,
-//                                  const KitchenState *leftovers) {
-//   report->day_number = g_worker_config->current_day;
+/**
+ * @brief Gestisce il ciclo di vita dei processi (Spawn o Reconfig)
+ *
+ * @param day Giorno corrente.
+ * @param config_path Percorso del file di configurazione.
+ */
+static void manage_worker_lifecycle(int day, const char *config_path) {
+  if (day == 1) {
+    start_all_processes(config_path);
+  } else {
+    perform_dynamic_reconfiguration(g_config.nof_workers -
+                                    g_config.workstations_cassa);
+  }
+}
 
-//   report->daily_users_served =
-//       end->total_users_served - start->total_users_served;
-//   report->daily_users_w_ticket =
-//       end->total_users_w_ticket - start->total_users_w_ticket;
-//   report->daily_users_refused =
-//       end->total_users_refused - start->total_users_refused;
+/**
+ * @brief Segnala agli utenti che il giorno inizia.
+ */
+static void signal_day_start_to_users(void) {
+  // wait dinamica => allineamento processi
+  useconds_t dynamic_wait = 20000 + (useconds_t)(g_config.nof_users * 50);
+  usleep(dynamic_wait);
 
-//   report->daily_plates_primi =
-//       end->total_plates_primi - start->total_plates_primi;
-//   report->daily_plates_secondi =
-//       end->total_plates_secondi - start->total_plates_secondi;
-//   report->daily_plates_caffe =
-//       end->total_plates_caffe - start->total_plates_caffe;
+  // sblocca semaforo
+  struct sembuf sb = {SEM_INDEX_DAY_CHANGE, (short)g_config.nof_users, 0};
+  semop(g_sem_id, &sb, 1);
+}
 
-//   report->daily_revenue = end->total_revenue - start->total_revenue;
-//   report->daily_transactions =
-//       end->total_transactions - start->total_transactions;
+/**
+ * @brief Calcola i delta tra fine e inizio giornata.
+ *
+ * @param report Puntatore al report giornaliero da popolare.
+ * @param day Giorno corrente.
+ * @param start Snapshot delle statistiche di inizio giornata.
+ * @param end Snapshot delle statistiche di fine giornata.
+ * @param leftovers Stato cucina a fine giornata.
+ */
+static void compute_daily_report(DailyReport *report, int day,
+                                 GlobalStats *start, GlobalStats *end,
+                                 KitchenState *leftovers) {
+  memset(report, 0, sizeof(DailyReport));
+  report->day_number = day;
 
-//   report->leftover_primi =
-//       (leftovers->remaining_primi > 0) ? leftovers->remaining_primi : 0;
-//   report->leftover_secondi =
-//       (leftovers->remaining_secondi > 0) ? leftovers->remaining_secondi : 0;
-//   report->leftover_caffe =
-//       (leftovers->remaining_caffe > 0) ? leftovers->remaining_caffe : 0;
+  // calcolo delta (end - start) => statistiche giornaliere
+  report->daily_users_served =
+      end->total_users_served - start->total_users_served;
+  report->daily_users_w_ticket =
+      end->total_users_w_ticket - start->total_users_w_ticket;
+  report->daily_users_refused =
+      end->total_users_refused - start->total_users_refused;
 
-//   report->daily_wait_primi =
-//       end->total_wait_time_primi - start->total_wait_time_primi;
-//   report->daily_wait_secondi =
-//       end->total_wait_time_secondi - start->total_wait_time_secondi;
-//   report->daily_wait_caffe =
-//       end->total_wait_time_caffe - start->total_wait_time_caffe;
-//   report->daily_wait_cassa =
-//       end->total_wait_time_cassa - start->total_wait_time_cassa;
-// }
+  report->daily_plates_primi =
+      end->total_plates_primi - start->total_plates_primi;
+  report->daily_plates_secondi =
+      end->total_plates_secondi - start->total_plates_secondi;
+  report->daily_plates_caffe =
+      end->total_plates_caffe - start->total_plates_caffe;
 
-// /**
-//  * @brief Ripristina le statistiche globali da un backup in caso di
-//  * interruzione.
-//  *
-//  * @param backup Puntatore al backup delle statistiche da ripristinare.
-//  */
-// static void handle_interruption_recovery(const GlobalStats *backup) {
-//   LOG_WARN("RESPONSABILE", "Interruzione rilevata. Ripristino statistiche.");
-//   sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
-//   *g_stats = *backup;
-//   sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
-// }
+  report->daily_revenue = end->total_revenue - start->total_revenue;
+  report->daily_transactions =
+      end->total_transactions - start->total_transactions;
 
-// finire di sistemare la suddivisione in funzioni piu piccole di
-// run_simulation_loop ///////////////
+  // leftovers (valore assoluto a fine giornata)
+  report->leftover_primi =
+      (leftovers->remaining_primi > 0) ? leftovers->remaining_primi : 0;
+  report->leftover_secondi =
+      (leftovers->remaining_secondi > 0) ? leftovers->remaining_secondi : 0;
+  report->leftover_caffe =
+      (leftovers->remaining_caffe > 0) ? leftovers->remaining_caffe : 0;
+
+  // refills
+  report->daily_refilled_primi =
+      end->total_refilled_primi - start->total_refilled_primi;
+  report->daily_refilled_secondi =
+      end->total_refilled_secondi - start->total_refilled_secondi;
+  report->daily_refilled_caffe =
+      end->total_refilled_caffe - start->total_refilled_caffe;
+
+  // tempi
+  report->daily_wait_primi =
+      end->total_wait_time_primi - start->total_wait_time_primi;
+  report->daily_wait_secondi =
+      end->total_wait_time_secondi - start->total_wait_time_secondi;
+  report->daily_wait_caffe =
+      end->total_wait_time_caffe - start->total_wait_time_caffe;
+  report->daily_wait_cassa =
+      end->total_wait_time_cassa - start->total_wait_time_cassa;
+
+  report->daily_user_poverty =
+      end->total_user_poverty - start->total_user_poverty;
+}
+
+/**
+ * @brief Ripristina le statistiche in caso di CTRL+C
+ *
+ * @param backup Puntatore allo snapshot di backup.
+ */
+static void restore_stats_on_shutdown(GlobalStats *backup) {
+  sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
+  *g_stats = *backup;
+  sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
+
+  LOG_WARN("RESPONSABILE", "Interruzione rilevata. Ripristino statistiche "
+                           "all'ultimo giorno completo.");
+}
 
 /**
  * @brief Loop principale della simulazione.
@@ -830,51 +870,21 @@ void run_simulation_loop(const char *config_path, int *day) {
     LOG_INFO("RESPONSABILE", COLOR_CYAN "Inizio Giorno %d" COLOR_RESET, (*day));
     FLUSH_LOGS;
 
-    sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
+    setup_day_start(*day, &start_of_day_stats);
 
-    // avvio o refill giornaliero
-    if ((*day) != 1) {
-      g_kitchen->remaining_primi = g_config.max_porzioni_primi;
-      g_kitchen->remaining_secondi = g_config.max_porzioni_secondi;
-      g_kitchen->remaining_caffe = g_config.max_porzioni_caffe;
-      // snapshot inizio giornata
-      LOG_CONF("RESPONSABILE", "Cucina rifornita (Day Start).");
-    }
-
-    start_of_day_stats = *g_stats;
-
-    g_worker_config->current_day = *day;
-    sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
-
-    if ((*day) == 1) {
-      start_all_processes(config_path);
-    }
-    if ((*day) > 1) {
-      perform_dynamic_reconfiguration(g_config.nof_workers -
-                                      g_config.workstations_cassa);
-    }
+    manage_worker_lifecycle(*day, config_path);
 
     LOG_INFO("RESPONSABILE", "Via libera agli utenti (Giorno %d)", *day);
     FLUSH_LOGS;
 
-    // sincronizzazione log fine-inizio giornata | 20ms + 50us per utente
-    useconds_t dynamic_wait = 20000 + (g_config.nof_users * 50);
-    usleep(dynamic_wait);
-
     // segnalo inizio giornata
-    struct sembuf sb = {SEM_INDEX_DAY_CHANGE, (short)g_config.nof_users, 0};
-    semop(g_sem_id, &sb, 1);
+    signal_day_start_to_users();
 
     // simulazione tempo
     simulate_day_cycle();
 
     if (g_shutdown) {
-      LOG_WARN("RESPONSABILE", "Interruzione rilevata. Ripristino statistiche "
-                               "all'ultimo giorno completo.");
-      sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
-      *g_stats = start_of_day_stats;
-      sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
-
+      restore_stats_on_shutdown(&start_of_day_stats);
       break;
     }
 
@@ -882,78 +892,29 @@ void run_simulation_loop(const char *config_path, int *day) {
     handle_day_end_sync();
 
     if (g_shutdown) {
-      LOG_WARN("RESPONSABILE",
-               "Interruzione durante sync. Ripristino statistiche.");
-      sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
-      *g_stats = start_of_day_stats;
-      sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
+      restore_stats_on_shutdown(&start_of_day_stats);
       break;
     }
 
-    DailyReport report;
-    memset(&report, 0, sizeof(DailyReport));
-    report.day_number = (*day);
-
     sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
-    GlobalStats end = *g_stats;
+    GlobalStats end_of_day_stats = *g_stats;
     KitchenState leftovers = *g_kitchen;
-    sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
 
-    // calcolo delta per DailyReport
-    report.daily_users_served =
-        end.total_users_served - start_of_day_stats.total_users_served;
-    report.daily_users_w_ticket =
-        end.total_users_w_ticket - start_of_day_stats.total_users_w_ticket;
-    report.daily_users_refused =
-        end.total_users_refused - start_of_day_stats.total_users_refused;
-    report.daily_plates_primi =
-        end.total_plates_primi - start_of_day_stats.total_plates_primi;
-    report.daily_plates_secondi =
-        end.total_plates_secondi - start_of_day_stats.total_plates_secondi;
-    report.daily_plates_caffe =
-        end.total_plates_caffe - start_of_day_stats.total_plates_caffe;
-    report.daily_revenue = end.total_revenue - start_of_day_stats.total_revenue;
-
-    report.daily_transactions =
-        end.total_transactions - start_of_day_stats.total_transactions;
-
-    report.leftover_primi =
+    g_stats->total_leftover_primi +=
         (leftovers.remaining_primi > 0) ? leftovers.remaining_primi : 0;
-    report.leftover_secondi =
+    g_stats->total_leftover_secondi +=
         (leftovers.remaining_secondi > 0) ? leftovers.remaining_secondi : 0;
-    report.leftover_caffe =
+    g_stats->total_leftover_caffe +=
         (leftovers.remaining_caffe > 0) ? leftovers.remaining_caffe : 0;
 
-    report.daily_refilled_primi =
-        end.total_refilled_primi - start_of_day_stats.total_refilled_primi;
-    report.daily_refilled_secondi =
-        end.total_refilled_secondi - start_of_day_stats.total_refilled_secondi;
-    report.daily_refilled_caffe =
-        end.total_refilled_caffe - start_of_day_stats.total_refilled_caffe;
-
-    // delta tempi
-    report.daily_wait_primi =
-        end.total_wait_time_primi - start_of_day_stats.total_wait_time_primi;
-    report.daily_wait_secondi = end.total_wait_time_secondi -
-                                start_of_day_stats.total_wait_time_secondi;
-    report.daily_wait_caffe =
-        end.total_wait_time_caffe - start_of_day_stats.total_wait_time_caffe;
-    report.daily_wait_cassa =
-        end.total_wait_time_cassa - start_of_day_stats.total_wait_time_cassa;
-
-    report.daily_user_poverty =
-        end.total_user_poverty - start_of_day_stats.total_user_poverty;
-
-    sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
-    g_stats->total_leftover_primi += report.leftover_primi;
-    g_stats->total_leftover_secondi += report.leftover_secondi;
-    g_stats->total_leftover_caffe += report.leftover_caffe;
     sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
 
-    handle_daily_stats(&report, g_stats);
+    // report
+    DailyReport report;
+    compute_daily_report(&report, *day, &start_of_day_stats, &end_of_day_stats,
+                         &leftovers);
 
-    // aggiorno snapshot per domani
-    start_of_day_stats = end;
+    handle_daily_stats(&report, g_stats);
 
     // check overload
     if (report.daily_users_refused > g_config.overload_threshold) {
