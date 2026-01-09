@@ -102,6 +102,9 @@ typedef struct config {
   int user_min_daily_salary; // USER_MIN_DAILY_SALARY
   int user_max_daily_salary; // USER_MAX_DAILY_SALARY
 
+  int max_groups; // MAX_GROUPS
+  int max_users_per_group; // MAX_USERS_PER_GROUP
+
   ///////////////////////////////////
   //  7) LOGISTICA (Rifornimenti)  //
   ///////////////////////////////////

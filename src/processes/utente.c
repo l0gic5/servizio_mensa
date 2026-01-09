@@ -22,14 +22,17 @@
 #include "common/config.h"
 #include "common/ipc_utils.h"
 #include "common/logger.h"
+#include "common/names.h"
 #include "common/stats.h"
 #include "common/types.h"
-#include "common/names.h"
 
 static int g_sem_id = -1;
 static int g_msg_id = -1;
 static int g_shm_stats_id = -1;
+static int g_shm_groups_id = -1;
+
 static GlobalStats *g_stats = NULL;
+static GroupState *g_groups = NULL;
 
 static volatile sig_atomic_t g_running = 1;
 static volatile sig_atomic_t g_day_ended = 0;
@@ -153,6 +156,9 @@ int setup_ipc(void) {
 
   g_shm_stats_id = allocate_shm(sizeof(GlobalStats), FTOK_SHM_ID);
   g_stats = (GlobalStats *)attach_shm(g_shm_stats_id);
+
+  g_shm_groups_id = allocate_shm(sizeof(GroupState), FTOK_SHM_GROUPS_ID);
+  g_groups = (GroupState *)attach_shm(g_shm_groups_id);
 
   if (g_sem_id == -1 || g_msg_id == -1 || g_stats == NULL) {
     return -1;
@@ -355,6 +361,58 @@ void consume_coffee_bar(Config *cfg) {
   LOG_INFO(log_tag, "Caffè finito.");
 }
 
+void wait_for_group(int group_id, int group_size) {
+  // utente solo
+  if (group_size <= 1) {
+    return;
+  }
+
+  LOG_INFO(log_tag, "Attendo il gruppo %d (%d persone) prima della cassa...",
+           group_id, group_size);
+
+  double start_wait = get_current_time_sec();
+
+  sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
+
+  g_groups->arrived_count[group_id]++;
+  int arrived = g_groups->arrived_count[group_id];
+
+  sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
+
+  int sem_idx = SEM_GROUP_BARRIER_BASE + group_id;
+
+  if (arrived == group_size) {
+    LOG_INFO(log_tag, "Sono l'ultimo del gruppo! Andiamo a pagare.");
+
+    struct sembuf sb;
+    sb.sem_num = (unsigned short)sem_idx;
+    sb.sem_op = (short)(group_size - 1);
+    sb.sem_flg = 0;
+    semop(g_sem_id, &sb, 1);
+  } else {
+    struct sembuf sb;
+    sb.sem_num = (unsigned short)sem_idx;
+    sb.sem_op = -1;
+    sb.sem_flg = 0;
+
+    // 10 secondi di pazienza
+    struct timespec timeout = {10, 0};
+    if (semtimedop(g_sem_id, &sb, 1, &timeout) == -1) {
+      LOG_WARN(log_tag,
+               "Timeout o errore aspettando il gruppo. Vado a pagare da solo.");
+    } else {
+      LOG_INFO(log_tag, "Gruppo riunito. Vado in cassa.");
+    }
+  }
+
+  double end_wait = get_current_time_sec();
+  double waited_seconds = end_wait - start_wait;
+
+  sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
+  g_stats->total_group_wait_time += waited_seconds;
+  sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
+}
+
 /**
  * @brief Loop giornaliero dell'utente.
  * 1. Prendi Primi/Secondi
@@ -362,7 +420,8 @@ void consume_coffee_bar(Config *cfg) {
  * 3. Mangia Cibo (Tavolo)
  * 4. Prendi Caffè (Se pagato) -> Bevi (Bancone)
  */
-void user_routine(Config *cfg, double *current_budget, bool has_ticket) {
+void user_routine(Config *cfg, double *current_budget, bool has_ticket,
+                  int group_id, int group_size) {
   double conto_da_pagare = 0.0;
   double budget_disponibile = *current_budget;
 
@@ -499,6 +558,10 @@ void user_routine(Config *cfg, double *current_budget, bool has_ticket) {
     return;
   }
 
+  if (g_running && !g_day_ended) {
+    wait_for_group(group_id, group_size);
+  }
+
   // 3) PAGAMENTO ALLA CASSA
 
   bool paid = false;
@@ -594,8 +657,10 @@ int main(int argc, char *argv[]) {
 
   srand((unsigned int)time(NULL) ^ (unsigned int)getpid());
 
-  if (argc < 3) {
-    fprintf(stderr, "Usage: %s <config_path> <has_ticket>\n", argv[0]);
+  if (argc < 5) {
+    fprintf(stderr,
+            "Usage: %s <config_path> <has_ticket> <group_id> <group_size>\n",
+            argv[0]);
     exit(EXIT_FAILURE);
   }
 
@@ -607,6 +672,18 @@ int main(int argc, char *argv[]) {
   bool has_ticket = (endptr == argv[2] || *endptr != '\0' || temp_val == -1)
                         ? true
                         : (bool)temp_val;
+
+  int group_id = (int)strtol(argv[3], &endptr, 10);
+  if (endptr == argv[3] || *endptr != '\0') {
+    fprintf(stderr, "Invalid group_id: %s\n", argv[3]);
+    exit(EXIT_FAILURE);
+  }
+
+  int group_size = (int)strtol(argv[4], &endptr, 10);
+  if (endptr == argv[4] || *endptr != '\0') {
+    fprintf(stderr, "Invalid group_size: %s\n", argv[4]);
+    exit(EXIT_FAILURE);
+  }
 
   names_init();
   log_tag = get_random_identity(ROLE_UTENTE);
@@ -654,8 +731,8 @@ int main(int argc, char *argv[]) {
       my_budget = config.user_budget_max;
     }
 
-    LOG_INFO(log_tag, "Giorno %d: Ricevuto stipendio %.2f€. Totale: %.2f€",
-             day, daily_salary, my_budget);
+    LOG_INFO(log_tag, "Giorno %d: Ricevuto stipendio %.2f€. Totale: %.2f€", day,
+             daily_salary, my_budget);
 
     if (config.user_max_arrival_delay_us > 0) {
       struct timespec ts = {
@@ -666,7 +743,7 @@ int main(int argc, char *argv[]) {
       }
     }
 
-    user_routine(&config, &my_budget, has_ticket);
+    user_routine(&config, &my_budget, has_ticket, group_id, group_size);
 
     LOG_INFO(log_tag, "Finito il pasto, attendo chiusura mensa (Giorno %d)...",
              day);

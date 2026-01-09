@@ -37,6 +37,7 @@ static int g_msg_id = -1;
 static int g_shm_roles_id = -1;
 static int g_shm_stats_id = -1;
 static int g_shm_kitchen_id = -1;
+static int g_shm_groups_id = -1;
 
 static Config g_config;
 static pid_t *g_child_pids = NULL;
@@ -45,6 +46,7 @@ static int g_total_children = 0;
 static GlobalStats *g_stats = NULL;
 static KitchenState *g_kitchen = NULL;
 static WorkerConfig *g_worker_config = NULL;
+static GroupState *g_groups = NULL;
 
 static volatile sig_atomic_t g_shutdown = 0;
 
@@ -173,6 +175,14 @@ int setup_ipc() {
   g_worker_config = (WorkerConfig *)attach_shm(g_shm_roles_id);
   memset(g_worker_config, 0, sizeof(WorkerConfig));
 
+  // 3) SHM gruppi utenti
+  g_shm_groups_id = allocate_shm(sizeof(GroupState), FTOK_SHM_GROUPS_ID);
+  if (g_shm_groups_id == -1) {
+    return -1;
+  }
+  g_groups = (GroupState *)attach_shm(g_shm_groups_id);
+  memset(g_groups, 0, sizeof(GroupState));
+
   // 3) coda messaggi
   g_msg_id = create_msg_queue();
   if (g_msg_id == -1) {
@@ -183,6 +193,10 @@ int setup_ipc() {
   g_sem_id = create_sem_set(TOTAL_SEMS);
   if (g_sem_id == -1) {
     return -1;
+  }
+
+  for (int i = 0; i < MAX_GROUPS; i++) {
+    init_sem(g_sem_id, SEM_GROUP_BARRIER_BASE + i, 0);
   }
 
   // Init Semafori Code Utenti
@@ -465,17 +479,47 @@ void start_all_processes(const char *config_path) {
   spawn_worker_group(OP_CAFFE, w_caffe, PATH_OPERATORE, config_path,
                      &current_worker_id, &pid_index);
 
-  // spawn Utenti
-  for (int i = 0; i < g_config.nof_users; i++) {
-    int has_ticket = random_probability(g_config.avg_user_w_ticket, rand);
+  int users_spawned = 0;
+  int current_group_id = 0;
 
-    char ticket_arg[2];
-    sprintf(ticket_arg, "%d", has_ticket);
+  // gestione gruppi utenti
+  while (users_spawned < g_config.nof_users) {
+    // estrae dimensione casuale gruppo [1 .. MAX]
+    int group_size = (rand() % g_config.max_users_per_group) + 1;
 
-    char *args_utente[] = {(char *)PATH_UTENTE, (char *)config_path, ticket_arg,
-                           NULL};
+    if (users_spawned + group_size > g_config.nof_users) {
+      group_size = g_config.nof_users - users_spawned;
+    }
 
-    g_child_pids[pid_index++] = spawn_process(PATH_UTENTE, args_utente);
+    sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
+    g_stats->total_groups_created++;
+    sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
+
+    LOG_INFO(log_tag, "Creazione Gruppo ID %d con %d utenti.", current_group_id,
+             group_size);
+
+    for (int k = 0; k < group_size; k++) {
+      int has_ticket = random_probability(g_config.avg_user_w_ticket, rand);
+
+      char ticket_arg[2];
+      sprintf(ticket_arg, "%d", has_ticket);
+
+      // GroupID e GroupSize => argomenti
+      char group_id_arg[16];
+      sprintf(group_id_arg, "%d", current_group_id);
+
+      char group_size_arg[16];
+      sprintf(group_size_arg, "%d", group_size);
+
+      char *args_utente[] = {(char *)PATH_UTENTE, (char *)config_path,
+                             ticket_arg,          group_id_arg,
+                             group_size_arg,      NULL};
+
+      g_child_pids[pid_index++] = spawn_process(PATH_UTENTE, args_utente);
+      users_spawned++;
+    }
+
+    current_group_id++;
   }
 
   sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
@@ -772,6 +816,7 @@ static void setup_day_start(int day, GlobalStats *start_snapshot) {
 
   // SHM sets
   g_worker_config->current_day = day;
+  memset(g_groups->arrived_count, 0, sizeof(int) * MAX_GROUPS);
 
   sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
 }
@@ -826,6 +871,11 @@ static void compute_daily_report(DailyReport *report, int day,
       end->total_users_w_ticket - start->total_users_w_ticket;
   report->daily_users_refused =
       end->total_users_refused - start->total_users_refused;
+
+  report->daily_groups_created =
+      end->total_groups_created - start->total_groups_created;
+  report->daily_group_wait_time =
+      end->total_group_wait_time - start->total_group_wait_time;
 
   report->daily_plates_primi =
       end->total_plates_primi - start->total_plates_primi;

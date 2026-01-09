@@ -259,6 +259,9 @@ void test_coherence_with_real_default_file(void) {
   TEST_ASSERT_EQUAL_INT_MESSAGE(15, config.user_max_daily_salary,
                                 "user_max_daily_salary");
 
+  TEST_ASSERT_EQUAL_INT_MESSAGE(4, config.max_users_per_group,
+                                "max_users_per_group");
+
   // 7) LOGISTICA
   TEST_ASSERT_EQUAL_INT_MESSAGE(10, config.refill_interval_minutes,
                                 "refill_interval_minutes");

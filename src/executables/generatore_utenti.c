@@ -41,7 +41,11 @@ pid_t spawn_user(const char *config_path, Config *cfg) {
   if (pid == 0) {
     char *ticket_arg = (rand() % 100 < cfg->avg_user_w_ticket) ? "1" : "0";
 
-    char *args[] = {(char *)PATH_UTENTE, (char *)config_path, ticket_arg, NULL};
+    char *group_id_arg = "0";
+    char *group_size_arg = "1";
+
+    char *args[] = {(char *)PATH_UTENTE, (char *)config_path, ticket_arg,
+                    group_id_arg,        group_size_arg,      NULL};
 
     execve(PATH_UTENTE, args, NULL);
     perror("execve");
@@ -166,7 +170,8 @@ int main(int argc, char *argv[]) {
     printf("\n");
   }
 
-  printf(COLOR_RED "Tempo scaduto.\nTerminazione utenti ancora vivi...\n" COLOR_RESET);
+  printf(COLOR_RED
+         "Tempo scaduto.\nTerminazione utenti ancora vivi...\n" COLOR_RESET);
 
   for (int i = 0; i < num_users_to_spawn; i++) {
     if (pids[i] > 0) {

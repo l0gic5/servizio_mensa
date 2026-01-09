@@ -32,6 +32,7 @@ union semun {
 #define FTOK_MSG_ID 'Q'
 #define FTOK_SHM_ROLES_ID 'R'
 #define FTOK_SHM_SUPPLY_ID 'K'
+#define FTOK_SHM_GROUPS_ID 'G'
 
 /**
  * @brief Genera e restituisce la chiave IPC del progetto.

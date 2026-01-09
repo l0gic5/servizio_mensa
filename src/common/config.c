@@ -196,6 +196,12 @@ static void apply_config_parameter(Config *config, const char *key,
     config->user_max_daily_salary = atoi(value);
   }
 
+  else if (strcmp(key, "MAX_GROUPS") == 0) {
+    config->max_groups = atoi(value);
+  } else if (strcmp(key, "MAX_USERS_PER_GROUP") == 0) {
+    config->max_users_per_group = atoi(value);
+  }
+
   ///////////////////////////////////
   //  7) LOGISTICA (Rifornimenti)  //
   ///////////////////////////////////
@@ -322,6 +328,9 @@ static void set_default_values(Config *config) {
   config->user_budget_max = 50;
   config->user_min_daily_salary = 5;
   config->user_max_daily_salary = 15;
+
+  config->max_groups = 30;
+  config->max_users_per_group = 4;
 
   // 7) LOGISTICA
   config->refill_interval_minutes = 10;

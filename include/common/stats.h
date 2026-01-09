@@ -18,6 +18,9 @@ typedef struct global_stats {
   int total_users_refused;
   int total_users_w_ticket;
 
+  int total_groups_created;
+  double total_group_wait_time;
+
   // piatti distribuiti
   int total_plates_primi;
   int total_plates_secondi;
@@ -47,6 +50,9 @@ typedef struct global_stats {
 
 typedef struct daily_report {
   int day_number;
+
+  int daily_groups_created;
+  double daily_group_wait_time;
 
   // delta (oggi - ieri)
   int daily_users_served;
