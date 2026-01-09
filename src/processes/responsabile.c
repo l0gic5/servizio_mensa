@@ -48,10 +48,11 @@ static WorkerConfig *g_worker_config = NULL;
 static volatile sig_atomic_t g_shutdown = 0;
 
 /**
- * @brief Funzione di pulizia risorse (chiamata a fine main o signal handler)
+ * @brief Termina tutti i processi figli e attende la loro chiusura.
+ * Non tocca la memoria condivisa.
  */
-void cleanup_resources(void) {
-  LOG_CONF("RESPONSABILE", "Avvio procedura di cleanup (inviato SIGTERM)...");
+void wait_for_children_termination(void) {
+  LOG_CONF("RESPONSABILE", "Avvio terminazione processi figli...");
 
   signal(SIGTERM, SIG_IGN);
 
@@ -62,7 +63,11 @@ void cleanup_resources(void) {
       }
     }
 
-    sleep(1);
+    // 1s + 10ms per figlio
+    __useconds_t wait_time_us =
+        (__useconds_t)1000000 +
+        ((__useconds_t)g_total_children * (__useconds_t)10000);
+    usleep(wait_time_us);
 
     for (int i = 0; i < g_total_children; i++) {
       if (g_child_pids[i] > 0) {
@@ -79,9 +84,16 @@ void cleanup_resources(void) {
     }
 
     free(g_child_pids);
+    g_child_pids = NULL;
   }
+  LOG_CONF("RESPONSABILE", "Tutti i figli sono terminati.");
+}
 
-  // rimozione risorse IPC
+/**
+ * @brief Rimuove le risorse IPC (SHM, Semafori, Code).
+ * Da chiamare SOLO dopo aver stampato il report finale.
+ */
+void remove_ipc_resources(void) {
   if (g_sem_id != -1) {
     remove_sem_set(g_sem_id);
   }
@@ -98,13 +110,19 @@ void cleanup_resources(void) {
     remove_shm(g_shm_roles_id);
   }
 
-  // per utenti generati dinamicamente
   kill(0, SIGTERM);
-
   while (wait(NULL) > 0) {
   }
 
-  LOG_CONF("RESPONSABILE", "Cleanup completato. Terminazione.");
+  LOG_CONF("RESPONSABILE", "Risorse IPC rimosse. Terminazione.");
+}
+
+/**
+ * @brief Wrapper per signal handler
+ */
+void cleanup_resources(void) {
+  wait_for_children_termination();
+  remove_ipc_resources();
 }
 
 /**
@@ -409,7 +427,7 @@ void start_all_processes(const char *config_path) {
   int pid_index = 0;
   int current_worker_id = 0;
 
-  int w_cassa = 1;
+  int w_cassa = g_config.workstations_cassa;
   int w_primi, w_secondi, w_caffe;
 
   compute_initial_workers_distribution(
@@ -705,6 +723,101 @@ void handle_day_end_sync() {
   LOG_CONF("RESPONSABILE", "Sincronizzazione completata.");
 }
 
+// /**
+//  * @brief Prepara l'inizio della giornata: rifornisce cucina e invia segnale.
+//  *
+//  * @param day Numero del giorno corrente.
+//  * @param snapshot Puntatore allo snapshot delle statistiche a inizio
+//  giornata
+//  * (Output param).
+//  */
+// static void prepare_day_start(int day, GlobalStats *snapshot) {
+//   sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
+
+//   // rifornimento
+//   g_kitchen->remaining_primi = g_config.max_porzioni_primi;
+//   g_kitchen->remaining_secondi = g_config.max_porzioni_secondi;
+//   g_kitchen->remaining_caffe = g_config.max_porzioni_caffe;
+
+//   // snapshot per calcolo delta
+//   *snapshot = *g_stats;
+//   g_worker_config->current_day = day;
+
+//   sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
+
+//   // segnalazione IPC
+//   struct sembuf sb = {SEM_INDEX_DAY_CHANGE, 1, 0};
+//   semop(g_sem_id, &sb, 1);
+
+//   LOG_CONF("RESPONSABILE", "Giorno %d: Cucina rifornita e segnale inviato.",
+//            day);
+// }
+
+// /**
+//  * @brief Calcola il report giornaliero basandosi sugli snapshot.
+//  *
+//  * @param report Puntatore al DailyReport da popolare.
+//  * @param start Puntatore allo snapshot delle statistiche a inizio giornata.
+//  * @param end Puntatore allo snapshot delle statistiche a fine giornata.
+//  * @param leftovers Puntatore allo stato della cucina a fine giornata.
+//  */
+// static void compute_daily_report(DailyReport *report, const GlobalStats
+// *start,
+//                                  const GlobalStats *end,
+//                                  const KitchenState *leftovers) {
+//   report->day_number = g_worker_config->current_day;
+
+//   report->daily_users_served =
+//       end->total_users_served - start->total_users_served;
+//   report->daily_users_w_ticket =
+//       end->total_users_w_ticket - start->total_users_w_ticket;
+//   report->daily_users_refused =
+//       end->total_users_refused - start->total_users_refused;
+
+//   report->daily_plates_primi =
+//       end->total_plates_primi - start->total_plates_primi;
+//   report->daily_plates_secondi =
+//       end->total_plates_secondi - start->total_plates_secondi;
+//   report->daily_plates_caffe =
+//       end->total_plates_caffe - start->total_plates_caffe;
+
+//   report->daily_revenue = end->total_revenue - start->total_revenue;
+//   report->daily_transactions =
+//       end->total_transactions - start->total_transactions;
+
+//   report->leftover_primi =
+//       (leftovers->remaining_primi > 0) ? leftovers->remaining_primi : 0;
+//   report->leftover_secondi =
+//       (leftovers->remaining_secondi > 0) ? leftovers->remaining_secondi : 0;
+//   report->leftover_caffe =
+//       (leftovers->remaining_caffe > 0) ? leftovers->remaining_caffe : 0;
+
+//   report->daily_wait_primi =
+//       end->total_wait_time_primi - start->total_wait_time_primi;
+//   report->daily_wait_secondi =
+//       end->total_wait_time_secondi - start->total_wait_time_secondi;
+//   report->daily_wait_caffe =
+//       end->total_wait_time_caffe - start->total_wait_time_caffe;
+//   report->daily_wait_cassa =
+//       end->total_wait_time_cassa - start->total_wait_time_cassa;
+// }
+
+// /**
+//  * @brief Ripristina le statistiche globali da un backup in caso di
+//  * interruzione.
+//  *
+//  * @param backup Puntatore al backup delle statistiche da ripristinare.
+//  */
+// static void handle_interruption_recovery(const GlobalStats *backup) {
+//   LOG_WARN("RESPONSABILE", "Interruzione rilevata. Ripristino statistiche.");
+//   sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
+//   *g_stats = *backup;
+//   sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
+// }
+
+// finire di sistemare la suddivisione in funzioni piu piccole di
+// run_simulation_loop ///////////////
+
 /**
  * @brief Loop principale della simulazione.
  */
@@ -715,31 +828,42 @@ void run_simulation_loop(const char *config_path, int *day) {
   for ((*day) = 1; (*day) <= g_config.simulation_duration_days && !overload;
        (*day)++) {
     LOG_INFO("RESPONSABILE", COLOR_CYAN "Inizio Giorno %d" COLOR_RESET, (*day));
+    FLUSH_LOGS;
+
+    sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
 
     // avvio o refill giornaliero
-    if ((*day) == 1) {
-      start_all_processes(config_path);
-    } else {
-      sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
+    if ((*day) != 1) {
       g_kitchen->remaining_primi = g_config.max_porzioni_primi;
       g_kitchen->remaining_secondi = g_config.max_porzioni_secondi;
       g_kitchen->remaining_caffe = g_config.max_porzioni_caffe;
       // snapshot inizio giornata
-      start_of_day_stats = *g_stats;
-
-      g_worker_config->current_day = *day;
-      sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
-
-      // segnalo inizio giornata
-      struct sembuf sb = {SEM_INDEX_DAY_CHANGE, 1, 0};
-      semop(g_sem_id, &sb, 1);
-
       LOG_CONF("RESPONSABILE", "Cucina rifornita (Day Start).");
     }
 
-    if ((*day) > 1) {
-      perform_dynamic_reconfiguration(g_config.nof_workers - 1);
+    start_of_day_stats = *g_stats;
+
+    g_worker_config->current_day = *day;
+    sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
+
+    if ((*day) == 1) {
+      start_all_processes(config_path);
     }
+    if ((*day) > 1) {
+      perform_dynamic_reconfiguration(g_config.nof_workers -
+                                      g_config.workstations_cassa);
+    }
+
+    LOG_INFO("RESPONSABILE", "Via libera agli utenti (Giorno %d)", *day);
+    FLUSH_LOGS;
+
+    // sincronizzazione log fine-inizio giornata | 20ms + 50us per utente
+    useconds_t dynamic_wait = 20000 + (g_config.nof_users * 50);
+    usleep(dynamic_wait);
+
+    // segnalo inizio giornata
+    struct sembuf sb = {SEM_INDEX_DAY_CHANGE, (short)g_config.nof_users, 0};
+    semop(g_sem_id, &sb, 1);
 
     // simulazione tempo
     simulate_day_cycle();
@@ -817,6 +941,9 @@ void run_simulation_loop(const char *config_path, int *day) {
     report.daily_wait_cassa =
         end.total_wait_time_cassa - start_of_day_stats.total_wait_time_cassa;
 
+    report.daily_user_poverty =
+        end.total_user_poverty - start_of_day_stats.total_user_poverty;
+
     sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
     g_stats->total_leftover_primi += report.leftover_primi;
     g_stats->total_leftover_secondi += report.leftover_secondi;
@@ -847,6 +974,9 @@ int main(int argc, char *argv[]) {
   sa.sa_handler = signal_handler;
   sigaction(SIGINT, &sa, NULL);
   sigaction(SIGTERM, &sa, NULL);
+
+  // flush output buffer
+  FLUSH_LOGS;
 
   const char *config_path = (argc > 1) ? argv[1] : "conf/default.conf";
   if (parse_config(config_path, &g_config) == -1) {

@@ -42,6 +42,18 @@ void stop_handler(int sig) {
 }
 
 /**
+ * @brief Attende l'inizio della giornata (semaforo).
+ */
+void wait_for_day_start() {
+  struct sembuf sb = {SEM_INDEX_DAY_CHANGE, -1, 0};
+  if (semop(g_sem_id, &sb, 1) == -1) {
+    if (errno != EINTR) {
+      LOG_ERR("UTENTE", "Errore attesa inizio giorno");
+    }
+  }
+}
+
+/**
  * @brief Gestore per il cambio giorno.
  * Serve solo a "svegliare" la pause() intercettando il segnale
  * invece di far terminare il processo.
@@ -51,6 +63,9 @@ void day_change_handler(int sig) {
   g_day_ended = 1;
 }
 
+/**
+ * @brief Segnala la fine della giornata ai processi Utente.
+ */
 void signal_end_of_day() {
   struct sembuf sb = {SEM_INDEX_BARRIER, 1, 0};
   semop(g_sem_id, &sb, 1);
@@ -114,6 +129,15 @@ void mark_as_refused() {
 void mark_as_w_ticket() {
   sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
   g_stats->total_users_w_ticket++;
+  sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
+}
+
+/**
+ * @brief Segnala che l'utente non ha potuto mangiare per mancanza di budget.
+ */
+void mark_as_poverty() {
+  sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
+  g_stats->total_user_poverty++;
   sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
 }
 
@@ -327,7 +351,6 @@ void consume_coffee_bar(Config *cfg) {
 
 /**
  * @brief Loop giornaliero dell'utente.
- * RISTRUTTURATO SECONDO NUOVA LOGICA:
  * 1. Prendi Primi/Secondi
  * 2. Paga (Cibo + Caffè prenotato)
  * 3. Mangia Cibo (Tavolo)
@@ -398,6 +421,7 @@ void user_routine(Config *cfg, double *current_budget, bool has_ticket) {
   }
 
   if (conto_da_pagare <= 0.001) {
+    mark_as_poverty();
     LOG_WARN("UTENTE", "Oggi troppo povero (ho solo %.2f€). Salto il pasto.",
              *current_budget);
     return;
@@ -482,6 +506,7 @@ void user_routine(Config *cfg, double *current_budget, bool has_ticket) {
   if (g_running && conto_da_pagare > 0.001 && !g_day_ended) {
 
     if (*current_budget < importo_effettivo) {
+      mark_as_poverty();
       LOG_WARN("UTENTE", "Budget insufficiente anche con sconto. Esco.");
       return;
     }
@@ -594,9 +619,12 @@ int main(int argc, char *argv[]) {
 
   for (int day = 1; day <= config.simulation_duration_days && g_running;
        day++) {
-    // Reset giornaliero: il flag viene alzato dal SIGUSR1 (fine giornata).
-    // Senza questo reset, dopo il primo giorno l'utente non farà più pause()
-    // e segnalerà la barriera anche quando il Responsabile non ha chiuso.
+
+    wait_for_day_start();
+
+    // reset giornaliero: flag alzato dal SIGUSR1 (fine giornata)
+    // senza questo => non fa più pause() e segnala la barriera anche quando il
+    // Responsabile non ha chiuso
     g_day_ended = 0;
 
     // ritardo casuale arrivo utente

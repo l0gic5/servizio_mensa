@@ -1,2 +1,0 @@
-Tipo,Giorno,Utenti_Serviti,Utenti_Respinti,Utenti_con_Ticket,Primi,Secondi,Caffe,Ricavo,Attesa_Primi,Attesa_Secondi,Attesa_Caffe,Attesa_Cassa,Transazioni,Leftover_Primi,Leftover_Secondi,Leftover_Caffe,Refill_Primi,Refill_Secondi,Refill_Caffe
-GIORNALIERO,1,0,0,0,0,0,0,123.46,0.00000,0.00000,0.00000,0.00000,0,0,0,0,0,0,0

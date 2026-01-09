@@ -32,6 +32,8 @@ typedef struct global_stats {
 
   double total_revenue;
   int total_transactions;
+
+  int total_user_poverty;
 } GlobalStats;
 
 typedef struct daily_report {
@@ -63,6 +65,8 @@ typedef struct daily_report {
   int leftover_primi;
   int leftover_secondi;
   int leftover_caffe;
+
+  int daily_user_poverty;
 } DailyReport;
 
 /**

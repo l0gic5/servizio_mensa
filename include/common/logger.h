@@ -16,6 +16,12 @@
 #define COLOR_CYAN "\x1b[36m"
 #define COLOR_RESET "\x1b[0m"
 
+#define FLUSH_LOGS                                                             \
+  do {                                                                         \
+    fflush(stdout);                                                            \
+    fflush(stderr);                                                            \
+  } while (0)
+
 #define TEST_ERROR                                                             \
   if (errno) {                                                                 \
     fprintf(stderr,                                                            \
@@ -49,10 +55,13 @@
           getpid(), ##__VA_ARGS__)
 
 #define LOG_CONF(ctx, msg, ...)                                                \
-  fprintf(stdout,                                                              \
-          COLOR_PINK "[%s]" COLOR_PURPLE "(%d) " COLOR_PINK                    \
-                     "CONF: " msg COLOR_RESET "\n",                         \
-          ctx, getpid(), ##__VA_ARGS__)
+  do {                                                                         \
+    fprintf(stdout,                                                            \
+            COLOR_PINK "[%s]" COLOR_PURPLE "(%d) " COLOR_PINK                  \
+                       "CONF: " msg COLOR_RESET "\n",                          \
+            ctx, getpid(), ##__VA_ARGS__);                                     \
+    fflush(stdout);                                                            \
+  } while (0)
 
 #define LOG_WARN(ctx, msg, ...)                                                \
   fprintf(stdout,                                                              \
