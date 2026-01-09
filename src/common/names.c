@@ -73,42 +73,63 @@ static int load_list(const char *path, char ***list_out, int *count_out) {
  * @return int 0 se successo, -1 se errore
  */
 int names_init(void) {
+  int result = 0;
+
   if (!g_names_m) {
-    load_list(PATH_NOMI_M, &g_names_m, &g_count_m);
+    if (load_list(PATH_NOMI_M, &g_names_m, &g_count_m) == -1) {
+      result = -1;
+    }
   }
+
   if (!g_names_f) {
-    load_list(PATH_NOMI_F, &g_names_f, &g_count_f);
+    if (load_list(PATH_NOMI_F, &g_names_f, &g_count_f) == -1) {
+      result = -1;
+    }
   }
+
   if (!g_surnames) {
-    load_list(PATH_COGNOMI, &g_surnames, &g_count_s);
+    if (load_list(PATH_COGNOMI, &g_surnames, &g_count_s) == -1) {
+      result = -1;
+    }
   }
-  return 0;
+
+  return result;
 }
 
 /**
  * @brief Libera la memoria allocata per le liste di nomi.
  */
 void names_destroy(void) {
+  // Maschili
   if (g_names_m) {
     for (int i = 0; i < g_count_m; i++) {
       free(g_names_m[i]);
     }
     free(g_names_m);
+    g_names_m = NULL;
+    g_count_m = 0;
   }
+
+  // Femminili
   if (g_names_f) {
     for (int i = 0; i < g_count_f; i++) {
       free(g_names_f[i]);
     }
     free(g_names_f);
+    g_names_f = NULL;
+    g_count_f = 0;
   }
+
+  // Cognomi
   if (g_surnames) {
     for (int i = 0; i < g_count_s; i++) {
       free(g_surnames[i]);
     }
     free(g_surnames);
+    g_surnames = NULL;
+    g_count_s = 0;
   }
 }
-
 char *get_random_identity(PersonRole role) {
   const char *name = "Generico";
   const char *surname = "Rossi";
@@ -141,7 +162,6 @@ char *get_random_identity(PersonRole role) {
 
   char *result = NULL;
   char text_buf[128];
-
 
   switch (role) {
   case ROLE_RESPONSABILE:
