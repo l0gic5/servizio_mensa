@@ -202,11 +202,19 @@ static void apply_config_parameter(Config *config, const char *key,
 
   else if (strcmp(key, "REFILL_INTERVAL_MINUTES") == 0) {
     config->refill_interval_minutes = atoi(value);
-  } else if (strcmp(key, "AVG_REFILL_PRIMI") == 0) {
+  } else if (strcmp(key, "REFILL_VARIANCE_PERCENT") == 0) {
+    config->refill_variance_percent = atoi(value);
+  }
+
+  else if (strcmp(key, "AVG_REFILL_PRIMI") == 0) {
     config->avg_refill_primi = atoi(value);
   } else if (strcmp(key, "AVG_REFILL_SECONDI") == 0) {
     config->avg_refill_secondi = atoi(value);
-  } else if (strcmp(key, "MAX_PORZIONI_PRIMI") == 0) {
+  } else if (strcmp(key, "AVG_REFILL_CAFFE") == 0) {
+    config->avg_refill_caffe = atoi(value);
+  }
+
+  else if (strcmp(key, "MAX_PORZIONI_PRIMI") == 0) {
     config->max_porzioni_primi = atoi(value);
   } else if (strcmp(key, "MAX_PORZIONI_SECONDI") == 0) {
     config->max_porzioni_secondi = atoi(value);
@@ -227,16 +235,16 @@ static void apply_config_parameter(Config *config, const char *key,
             sizeof(config->export_folder_path) - 1);
   } else if (strcmp(key, "EXPORT_DAILY_REPORTS_CSV") == 0) {
     config->export_daily_reports_csv =
-        (strcmp(value, "true") == 0 || strcmp(value, "1") == 0);
+        (strcasecmp(value, "true") == 0 || strcmp(value, "1") == 0);
   } else if (strcmp(key, "CREATE_DAILY_SINGLE_FILES") == 0) {
     config->create_daily_single_files =
-    (strcmp(value, "true") == 0 || strcmp(value, "1") == 0);
+        (strcasecmp(value, "true") == 0 || strcmp(value, "1") == 0);
   } else if (strcmp(key, "DAILY_REPORTS_FILENAME_CSV") == 0) {
     strncpy(config->daily_reports_filename_csv, value,
             sizeof(config->daily_reports_filename_csv) - 1);
   } else if (strcmp(key, "EXPORT_FINAL_STATS_CSV") == 0) {
     config->export_final_stats_csv =
-        (strcmp(value, "true") == 0 || strcmp(value, "1") == 0);
+        (strcasecmp(value, "true") == 0 || strcmp(value, "1") == 0);
   } else if (strcmp(key, "FINAL_STATS_FILENAME_CSV") == 0) {
     strncpy(config->final_stats_filename_csv, value,
             sizeof(config->final_stats_filename_csv) - 1);
@@ -270,7 +278,7 @@ static void set_default_values(Config *config) {
   config->queue_capacity_caffe = 20;
   config->queue_capacity_cassa = 20;
 
-  config->ticket_reader_capacity = 4;
+  config->ticket_reader_capacity = 3;
   config->ticket_reader_timeout_ns = 5000000;
 
   config->workstations_primi = 2;
@@ -317,8 +325,11 @@ static void set_default_values(Config *config) {
 
   // 7) LOGISTICA
   config->refill_interval_minutes = 10;
+  config->refill_variance_percent = 20;
+
   config->avg_refill_primi = 20;
   config->avg_refill_secondi = 20;
+  config->avg_refill_caffe = 500;
 
   config->max_porzioni_primi = 50;
   config->max_porzioni_secondi = 50;

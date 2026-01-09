@@ -107,8 +107,12 @@ typedef struct config {
   ///////////////////////////////////
 
   int refill_interval_minutes; // REFILL_INTERVAL_MINUTES
+  int refill_variance_percent; // REFILL_VARIANCE_PERCENT
+
   int avg_refill_primi;        // AVG_REFILL_PRIMI
   int avg_refill_secondi;      // AVG_REFILL_SECONDI
+  int avg_refill_caffe;        // AVG_REFILL_CAFFE
+
   int max_porzioni_primi;      // MAX_PORZIONI_PRIMI
   int max_porzioni_secondi;    // MAX_PORZIONI_SECONDI
   int max_porzioni_caffe;      // MAX_PORZIONI_CAFFE

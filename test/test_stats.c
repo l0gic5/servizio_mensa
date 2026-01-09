@@ -17,7 +17,11 @@ void setUp(void) {
   system(cmd);
 }
 
-void tearDown(void) {}
+void tearDown(void) {
+  char cmd[256];
+  sprintf(cmd, "rm -rf %s", TEST_EXPORT_DIR);
+  system(cmd);
+}
 
 void test_process_daily_report_formatting(void) {
   DailyReport report = {.day_number = 1,

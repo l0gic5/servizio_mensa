@@ -371,7 +371,8 @@ char *process_final_report(GlobalStats *stats, int total_days) {
       "Utenti Serviti in totale: %d\n"
       "  * con ticket: (%d/%d)\n"
       "Utenti Respinti/Overload: %d\n"
-      "Media Utenti Poveri:   %.2f\n" COLOR_CYAN "Piatti Distribuiti:\n"
+      "Media Utenti Poveri:   %.2f\n"
+      "Piatti Distribuiti:\n"
       "  - Primi: %d\n"
       "  - Secondi: %d\n"
       "  - Caffè: %d\n"
@@ -505,11 +506,11 @@ void export_final_stats_to_csv(GlobalStats *total_stats, const int total_days,
       total_stats->total_users_served, total_stats->total_users_refused,
       total_stats->total_users_w_ticket, total_stats->total_plates_primi,
       total_stats->total_plates_secondi, total_stats->total_plates_caffe,
-      total_stats->total_revenue, total_stats->total_user_poverty,
-      avg_wait_time_primi, avg_wait_time_secondi, avg_wait_time_caffe,
-      avg_wait_time_cassa, total_stats->total_transactions, avg_leftover_primi,
-      avg_leftover_secondi, avg_leftover_caffe, avg_refill_primi,
-      avg_refill_secondi, avg_refill_caffe);
+      total_stats->total_revenue, avg_user_poverty, avg_wait_time_primi,
+      avg_wait_time_secondi, avg_wait_time_caffe, avg_wait_time_cassa,
+      total_stats->total_transactions, avg_leftover_primi, avg_leftover_secondi,
+      avg_leftover_caffe, avg_refill_primi, avg_refill_secondi,
+      avg_refill_caffe);
 
   LOG_INFO("STATS", "Statistiche finali (Globale) aggiunte su %s", final_path);
   free(final_path);

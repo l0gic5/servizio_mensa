@@ -544,7 +544,13 @@ void perform_periodic_refill() {
 
   // rifornimento PRIMI
   int current_primi = g_kitchen->remaining_primi;
-  int to_add_primi = g_config.avg_refill_primi;
+
+  int to_add_primi = (int)random_variance(
+      g_config.avg_refill_primi, g_config.refill_variance_percent, rand);
+  if (to_add_primi < 0) {
+    to_add_primi = 0;
+  }
+
   if (current_primi < g_config.max_porzioni_primi) {
     int new_quantity = current_primi + to_add_primi;
 
@@ -560,7 +566,13 @@ void perform_periodic_refill() {
 
   // rifornimento SECONDI
   int current_secondi = g_kitchen->remaining_secondi;
-  int to_add_secondi = g_config.avg_refill_secondi;
+  
+  int to_add_secondi = (int)random_variance(
+      g_config.avg_refill_secondi, g_config.refill_variance_percent, rand);
+  if (to_add_secondi < 0) {
+    to_add_secondi = 0;
+  }
+
   if (current_secondi < g_config.max_porzioni_secondi) {
     int new_quantity = current_secondi + to_add_secondi;
 
@@ -576,7 +588,13 @@ void perform_periodic_refill() {
   // rifornimento CAFFÈ => (max_porzioni_caffe - remaining_caffe) == caffè
   // infinito!
   int current_caffe = g_kitchen->remaining_caffe;
-  int to_add_caffe = g_config.max_porzioni_caffe - g_kitchen->remaining_caffe;
+
+  int to_add_caffe = (int)random_variance(
+      g_config.avg_refill_caffe, g_config.refill_variance_percent, rand);
+  if (to_add_caffe < 0) {
+    to_add_caffe = 0;
+  }
+
   if (current_caffe < g_config.max_porzioni_caffe) {
     int new_quantity = current_caffe + to_add_caffe;
 
