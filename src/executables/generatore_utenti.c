@@ -98,13 +98,13 @@ int main(int argc, char *argv[]) {
   }
 
   int start_day = worker_config->current_day;
-  printf(" -> Giorno Attuale rilevato: %d\n", start_day);
-  printf(" -> Gli utenti vivranno finché non inizia il Giorno %d.\n",
+  printf(" ➯ Giorno Attuale rilevato: %d\n", start_day);
+  printf(" ➯ Gli utenti vivranno finché non inizia il Giorno %d.\n",
          start_day + 1);
 
   pid_t *pids = malloc(sizeof(pid_t) * (size_t)num_users_to_spawn);
 
-  printf(COLOR_YELLOW "\n!!! SPAWN %d UTENTI !!!" COLOR_RESET "\n",
+  printf(COLOR_YELLOW "\nSPAWN DI %d UTENTI..." COLOR_RESET "\n\n",
          num_users_to_spawn);
 
   struct shmid_ds buf;
@@ -118,7 +118,7 @@ int main(int argc, char *argv[]) {
   for (int i = 0; i < num_users_to_spawn; i++) {
     pids[i] = spawn_user(config_path, &config);
     if (pids[i] > 0) {
-      printf(" -> Spawnato PID: %d\n", pids[i]);
+      printf(" ➤ Spawn di PID: %d\n", pids[i]);
       usleep(20000); // 20ms delay
     }
   }
@@ -166,7 +166,7 @@ int main(int argc, char *argv[]) {
     printf("\n");
   }
 
-  printf(COLOR_RED "Tempo scaduto. Terminazione utenti extra...\n" COLOR_RESET);
+  printf(COLOR_RED "Tempo scaduto.\nTerminazione utenti ancora vivi...\n" COLOR_RESET);
 
   for (int i = 0; i < num_users_to_spawn; i++) {
     if (pids[i] > 0) {
@@ -183,7 +183,7 @@ int main(int argc, char *argv[]) {
 
   free(pids);
   detach_shm(worker_config);
-  printf(COLOR_GREEN "Pulizia completata. Uscita.\n" COLOR_RESET);
+  printf(COLOR_GREEN "Pulizia completata.\n" COLOR_RESET);
 
   return EXIT_SUCCESS;
 }

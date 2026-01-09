@@ -201,7 +201,7 @@ void test_coherence_with_real_default_file(void) {
                                 "workstations_secondi");
   TEST_ASSERT_EQUAL_INT_MESSAGE(2, config.workstations_caffe,
                                 "workstations_caffe");
-  TEST_ASSERT_EQUAL_INT_MESSAGE(1, config.workstations_cassa,
+  TEST_ASSERT_EQUAL_INT_MESSAGE(2, config.workstations_cassa,
                                 "workstations_cassa");
 
   // 4) METRICHE DI SERVIZIO

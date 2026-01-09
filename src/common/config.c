@@ -284,7 +284,7 @@ static void set_default_values(Config *config) {
   config->workstations_primi = 2;
   config->workstations_secondi = 2;
   config->workstations_caffe = 2;
-  config->workstations_cassa = 1;
+  config->workstations_cassa = 2;
 
   // 4) METRICHE
   config->avg_service_primi = 100000000;
