@@ -20,6 +20,7 @@
 #include "common/config.h"
 #include "common/ipc_utils.h"
 #include "common/logger.h"
+#include "common/names.h"
 #include "common/stats.h"
 #include "common/types.h"
 
@@ -33,6 +34,8 @@ static WorkerConfig *g_worker_config = NULL;
 
 static volatile sig_atomic_t g_running = 1;
 static volatile sig_atomic_t g_day_signal = 0;
+
+char *log_tag = "CASSA";
 
 /**
  * @brief Gestore per terminazione pulita (SIGINT, SIGTERM).
@@ -62,7 +65,11 @@ void cleanup_resources(void) {
   if (g_worker_config) {
     detach_shm(g_worker_config);
   }
-  LOG_INFO("CASSA", "Chiusura modulo cassa.");
+
+  free(log_tag);
+  names_destroy();
+
+  LOG_INFO(log_tag, "Chiusura modulo cassa.");
 }
 
 /**
@@ -123,18 +130,26 @@ int main(int argc, char *argv[]) {
   }
   int my_id = atoi(argv[1]);
 
+  names_init();
+  log_tag = get_random_identity(ROLE_CASSA);
+
   Config config;
   if (parse_config(argv[2], &config) == -1) {
-    LOG_ERR("CASSA", "Errore parsing config");
+    LOG_ERR(log_tag, "Errore parsing config");
     exit(EXIT_FAILURE);
   }
 
   if (setup_ipc() == -1) {
-    LOG_ERR("CASSA", "Errore connessione IPC");
+    LOG_ERR(log_tag, "Errore connessione IPC");
     exit(EXIT_FAILURE);
   }
 
-  LOG_INFO("CASSA", "Modulo avviato. In attesa di pagamenti...");
+  sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
+  strncpy(g_worker_config->worker_names[my_id], log_tag, 63);
+  g_worker_config->worker_names[my_id][63] = '\0';
+  sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
+
+  LOG_INFO(log_tag, "Modulo avviato. In attesa di pagamenti...");
 
   bool queue_error = false;
   while (g_running && !queue_error) {
@@ -142,13 +157,15 @@ int main(int argc, char *argv[]) {
     if (g_worker_config->strike_end_times[my_id] > now) {
       double duration = difftime(g_worker_config->strike_end_times[my_id], now);
 
-      LOG_WARN("CASSA", "SCIOPERO! Cassa chiusa per %.0f s.", duration);
+      LOG_INFO(log_tag,
+               COLOR_RED "SCIOPERO! Cassa chiusa per %.0f s." COLOR_RESET,
+               duration);
 
       struct timespec req = {(time_t)duration, 0};
 
       nanosleep(&req, NULL);
 
-      LOG_INFO("CASSA", "Riapertura cassa.");
+      LOG_INFO(log_tag, "Riapertura cassa.");
     }
 
     // SE arriva segnale di fine giornata, segnalo la barriera anche
@@ -186,7 +203,7 @@ int main(int argc, char *argv[]) {
         sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
 
         char *log_msg = req.wants_ticket ? "scontato ticket" : "prezzo intero";
-        LOG_INFO("CASSA", "Incasso: %.2f€ [%s] (Cliente PID %d)",
+        LOG_INFO(log_tag, "Incasso: %.2f€ [%s] (Cliente PID %d)",
                  req.total_cost, log_msg, req.sender_pid);
 
         MessageResponse resp;
@@ -202,7 +219,7 @@ int main(int argc, char *argv[]) {
           g_day_signal = 0;
 
         } else if (errno != EINTR && g_running) {
-          LOG_ERR("CASSA", "Errore critico msgrcv");
+          LOG_ERR(log_tag, "Errore critico msgrcv");
           queue_error = true;
         }
       }

@@ -1,5 +1,4 @@
 #include "common/ipc_utils.h"
-#include "common/logger.h"
 
 key_t get_project_ipc_key(int project_id) {
   char path[256];

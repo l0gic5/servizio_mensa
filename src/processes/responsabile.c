@@ -1,6 +1,6 @@
 /**
  * @file responsabile.c
- * @brief Processo "Responsabile" (Manager).
+ * @brief Processo log_tag (Manager).
  *
  * Questo file contiene il codice sorgente per il processo responsabile
  * che gestisce le risorse IPC e avvia i processi lavoratori e utenti.
@@ -24,6 +24,7 @@
 #include "common/config.h"
 #include "common/ipc_utils.h"
 #include "common/logger.h"
+#include "common/names.h"
 #include "common/stats.h"
 #include "common/types.h"
 
@@ -47,12 +48,14 @@ static WorkerConfig *g_worker_config = NULL;
 
 static volatile sig_atomic_t g_shutdown = 0;
 
+char *log_tag = "RESPONSABILE";
+
 /**
  * @brief Termina tutti i processi figli e attende la loro chiusura.
  * Non tocca la memoria condivisa.
  */
 void wait_for_children_termination(void) {
-  LOG_CONF("RESPONSABILE", "Avvio terminazione processi figli...");
+  LOG_CONF(log_tag, "Avvio terminazione processi figli...");
 
   signal(SIGTERM, SIG_IGN);
 
@@ -86,7 +89,7 @@ void wait_for_children_termination(void) {
     free(g_child_pids);
     g_child_pids = NULL;
   }
-  LOG_CONF("RESPONSABILE", "Tutti i figli sono terminati.");
+  LOG_CONF(log_tag, "Tutti i figli sono terminati.");
 }
 
 /**
@@ -114,7 +117,7 @@ void remove_ipc_resources(void) {
   while (wait(NULL) > 0) {
   }
 
-  LOG_CONF("RESPONSABILE", "Risorse IPC rimosse. Terminazione.");
+  LOG_CONF(log_tag, "Risorse IPC rimosse. Terminazione.");
 }
 
 /**
@@ -123,6 +126,9 @@ void remove_ipc_resources(void) {
 void cleanup_resources(void) {
   wait_for_children_termination();
   remove_ipc_resources();
+
+  free(log_tag);
+  names_destroy();
 }
 
 /**
@@ -132,7 +138,7 @@ void signal_handler(int sig) {
   // EVITA IL warning: unused parameter ‘sig’ [-Wunused-parameter]
   (void)sig;
 
-  LOG_WARN("RESPONSABILE", "Ricevuto segnale di interruzione. Chiusura...");
+  LOG_WARN(log_tag, "Ricevuto segnale di interruzione. Chiusura...");
 
   g_shutdown = 1;
   // cleanup_resources();
@@ -251,7 +257,7 @@ void compute_initial_workers_distribution(int available_workers, int t_primi,
                                           int *w_caffe) {
 
   if (available_workers < 3) {
-    LOG_ERR("RESPONSABILE", "Troppi pochi worker! Configurazione impossibile.");
+    LOG_ERR(log_tag, "Troppi pochi worker! Configurazione impossibile.");
     exit(EXIT_FAILURE);
   }
 
@@ -385,7 +391,7 @@ void perform_dynamic_reconfiguration(int available_workers) {
   sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
 
   LOG_CONF(
-      "RESPONSABILE",
+      log_tag,
       "Reconfig Smart (basata su attese): Cassa: %d, Primi:%d, Secondi:%d, "
       "Caffè:%d",
       active_cassa, w_p, w_s, w_c);
@@ -420,7 +426,7 @@ void start_all_processes(const char *config_path) {
   g_child_pids = malloc(sizeof(pid_t) * (size_t)g_total_children);
 
   if (!g_child_pids) {
-    LOG_ERR("RESPONSABILE", "Malloc fallita");
+    LOG_ERR(log_tag, "Malloc fallita");
     exit(EXIT_FAILURE);
   }
 
@@ -444,7 +450,7 @@ void start_all_processes(const char *config_path) {
 
   sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
 
-  LOG_CONF("RESPONSABILE",
+  LOG_CONF(log_tag,
            "Distribuzione Iniziale:\n  - Cassa: %d\n  - Primi: %d\n  - "
            "Secondi: %d\n  - Caffè: %d",
            w_cassa, w_primi, w_secondi, w_caffe);
@@ -479,7 +485,7 @@ void start_all_processes(const char *config_path) {
 
   sleep((unsigned int)g_config.system_startup_delay_sec);
 
-  LOG_INFO("RESPONSABILE", "Processi avviati: %d", pid_index);
+  LOG_INFO(log_tag, "Processi avviati: %d", pid_index);
 }
 
 /**
@@ -566,7 +572,7 @@ void perform_periodic_refill() {
 
   // rifornimento SECONDI
   int current_secondi = g_kitchen->remaining_secondi;
-  
+
   int to_add_secondi = (int)random_variance(
       g_config.avg_refill_secondi, g_config.refill_variance_percent, rand);
   if (to_add_secondi < 0) {
@@ -608,14 +614,14 @@ void perform_periodic_refill() {
   }
 
   if (refilled) {
-    LOG_INFO("RESPONSABILE", "Refill periodico (%d min) eseguito.",
+    LOG_INFO(log_tag, "Refill periodico (%d min) eseguito.",
              g_config.refill_interval_minutes);
   }
   // else {
-  //   LOG_INFO("RESPONSABILE", "Refill non necessario (cucina piena).");
+  //   LOG_INFO(log_tag, "Refill non necessario (cucina piena).");
   // }
 
-  // LOG_INFO("RESPONSABILE",
+  // LOG_INFO(log_tag,
   //          "Refill eseguito. Stato cucina:\n  - %d Primi\n  - %d Secondi\n  -
   //          "
   //          "%d Caffè",
@@ -687,7 +693,7 @@ void handle_day_end_sync() {
       } else {
         // processo morto (zombie o errore)
         if (res > 0) {
-          LOG_WARN("RESPONSABILE", "PID %d terminato prematuramente.",
+          LOG_WARN(log_tag, "PID %d terminato prematuramente.",
                    g_child_pids[i]);
         }
         g_child_pids[i] = 0;
@@ -695,7 +701,7 @@ void handle_day_end_sync() {
     }
   }
 
-  LOG_CONF("RESPONSABILE", "Attesa sincronizzazione da %d processi...",
+  LOG_CONF(log_tag, "Attesa sincronizzazione da %d processi...",
            active_children);
 
   // barrier wait (sincronizzazione fine giornata)
@@ -717,12 +723,12 @@ void handle_day_end_sync() {
       // CASO 2 => errore (timeout o errore critico)
       else {
         if (errno == EAGAIN) {
-          LOG_ERR("RESPONSABILE",
+          LOG_ERR(log_tag,
                   "Timeout barriera fine giornata: il processo %d "
                   "non ha sincronizzato. Forzo shutdown.",
                   g_child_pids[i]);
         } else {
-          LOG_ERR("RESPONSABILE", "Errore critico wait barriera");
+          LOG_ERR(log_tag, "Errore critico wait barriera");
         }
 
         g_shutdown = 1;
@@ -738,7 +744,7 @@ void handle_day_end_sync() {
     }
   }
 
-  LOG_CONF("RESPONSABILE", "Sincronizzazione completata.");
+  LOG_CONF(log_tag, "Sincronizzazione completata.");
 }
 
 ///////////////////////
@@ -759,7 +765,7 @@ static void setup_day_start(int day, GlobalStats *start_snapshot) {
     g_kitchen->remaining_primi = g_config.max_porzioni_primi;
     g_kitchen->remaining_secondi = g_config.max_porzioni_secondi;
     g_kitchen->remaining_caffe = g_config.max_porzioni_caffe;
-    LOG_CONF("RESPONSABILE", "Cucina rifornita (Day Start).");
+    LOG_CONF(log_tag, "Cucina rifornita (Day Start).");
   }
 
   *start_snapshot = *g_stats;
@@ -872,8 +878,8 @@ static void restore_stats_on_shutdown(GlobalStats *backup) {
   *g_stats = *backup;
   sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
 
-  LOG_WARN("RESPONSABILE", "Interruzione rilevata. Ripristino statistiche "
-                           "all'ultimo giorno completo.");
+  LOG_WARN(log_tag, "Interruzione rilevata. Ripristino statistiche "
+                    "all'ultimo giorno completo.");
 }
 
 /**
@@ -885,14 +891,14 @@ void run_simulation_loop(const char *config_path, int *day) {
 
   for ((*day) = 1; (*day) <= g_config.simulation_duration_days && !overload;
        (*day)++) {
-    LOG_INFO("RESPONSABILE", COLOR_CYAN "Inizio Giorno %d" COLOR_RESET, (*day));
+    LOG_INFO(log_tag, COLOR_CYAN "Inizio Giorno %d" COLOR_RESET, (*day));
     FLUSH_LOGS;
 
     setup_day_start(*day, &start_of_day_stats);
 
     manage_worker_lifecycle(*day, config_path);
 
-    LOG_INFO("RESPONSABILE", "Via libera agli utenti (Giorno %d)", *day);
+    LOG_INFO(log_tag, "Via libera agli utenti (Giorno %d)", *day);
     FLUSH_LOGS;
 
     // segnalo inizio giornata
@@ -936,14 +942,14 @@ void run_simulation_loop(const char *config_path, int *day) {
 
     // check overload
     if (report.daily_users_refused > g_config.overload_threshold) {
-      LOG_ERR("RESPONSABILE", "TERMINAZIONE: Overload (%d > %d)",
+      LOG_ERR(log_tag, "TERMINAZIONE: Overload (%d > %d)",
               report.daily_users_refused, g_config.overload_threshold);
       overload = true;
     }
   }
 
   if (!overload && !g_shutdown) {
-    LOG_INFO("RESPONSABILE", "Simulazione completata.");
+    LOG_INFO(log_tag, "Simulazione completata.");
   }
 }
 
@@ -956,10 +962,15 @@ int main(int argc, char *argv[]) {
 
   // flush output buffer
   FLUSH_LOGS;
+  printf(SIMULATION_HEADER);
+  FLUSH_LOGS;
+
+  names_init();
+  log_tag = get_random_identity(ROLE_RESPONSABILE);
 
   const char *config_path = (argc > 1) ? argv[1] : "conf/default.conf";
   if (parse_config(config_path, &g_config) == -1) {
-    LOG_ERR("RESPONSABILE", "Errore parsing config: %s", config_path);
+    LOG_ERR(log_tag, "Errore parsing config: %s", config_path);
     exit(EXIT_FAILURE);
   }
 
@@ -967,11 +978,11 @@ int main(int argc, char *argv[]) {
     g_config.n_nanosecs_as_minute = 1000000;
   }
 
-  LOG_CONF("RESPONSABILE", "Configurazione `%s` caricata. Durata: %d gg",
-           config_path, g_config.simulation_duration_days);
+  LOG_CONF(log_tag, "Configurazione `%s` caricata. Durata: %d gg", config_path,
+           g_config.simulation_duration_days);
 
   if (setup_ipc(&g_stats) == -1) {
-    LOG_ERR("RESPONSABILE", "Errore setup IPC");
+    LOG_ERR(log_tag, "Errore setup IPC");
     cleanup_resources();
     exit(EXIT_FAILURE);
   }
@@ -986,7 +997,7 @@ int main(int argc, char *argv[]) {
   // sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
 
   LOG_CONF(
-      "RESPONSABILE",
+      log_tag,
       "Rifornimento iniziale completato:\n  - %d Primi\n  - %d Secondi\n  - "
       "%d Caffè",
       g_config.max_porzioni_primi, g_config.max_porzioni_secondi,

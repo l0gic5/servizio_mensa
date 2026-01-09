@@ -1,8 +1,17 @@
 #ifndef STATS_H
 #define STATS_H
 
-#include "types.h"
+#include <errno.h>
+#include <libgen.h>
 #include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+#include "common/logger.h"
+#include "types.h"
 
 typedef struct global_stats {
   int total_users_served;

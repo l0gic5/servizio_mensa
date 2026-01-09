@@ -37,6 +37,7 @@
 
 typedef struct worker_config {
   // indice worker -> enum OpType
+  char worker_names[MAX_WORKERS][64];
   int worker_roles[MAX_WORKERS];
   int total_workers_count;
 

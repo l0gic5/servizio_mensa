@@ -9,6 +9,8 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#include "common/logger.h"
+
 /**
  * @union semun
  * @brief Unione richiesta da semctl() per l'inizializzazione dei semafori.

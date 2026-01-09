@@ -1,6 +1,6 @@
 /**
  * @file operatore.c
- * @brief Processo "Operatore" (Worker).
+ * @brief Processo log_tag (Worker).
  *
  * Questo file contiene il codice sorgente per i processi lavoratori.
  * Ogni operatore simula il comportamento di un dipendente della mensa:
@@ -24,6 +24,7 @@
 #include "common/config.h"
 #include "common/ipc_utils.h"
 #include "common/logger.h"
+#include "common/names.h"
 #include "common/stats.h"
 #include "common/types.h"
 
@@ -41,6 +42,8 @@ static volatile sig_atomic_t g_running = 1;
 /// Flag volatile per indicare la fine della giornata lavorativa (impostato da
 /// signal handler)
 static volatile sig_atomic_t g_day_ended = 0;
+
+char *log_tag = "OPERATORE";
 
 /**
  * @brief Gestore dei segnali di terminazione (SIGTERM, SIGINT).
@@ -60,7 +63,10 @@ void cleanup_resources(void) {
     detach_shm(g_worker_config);
   }
 
-  LOG_INFO("OPERATORE", "Chiusura operatore...");
+  free(log_tag);
+  names_destroy();
+
+  LOG_INFO(log_tag, "Chiusura operatore...");
   exit(0);
 }
 
@@ -109,20 +115,23 @@ void signal_end_of_day() {
 int setup_ipc(void) {
   // 1) SHM statistiche
   g_shm_stats_id = allocate_shm(sizeof(GlobalStats), FTOK_SHM_ID);
-  if (g_shm_stats_id == -1)
+  if (g_shm_stats_id == -1) {
     return -1;
+  }
   g_stats = (GlobalStats *)attach_shm(g_shm_stats_id);
 
   g_shm_supply_id = allocate_shm(sizeof(KitchenState), FTOK_SHM_SUPPLY_ID);
-  if (g_shm_supply_id == -1)
+  if (g_shm_supply_id == -1) {
     return -1;
+  }
   g_kitchen = (KitchenState *)attach_shm(
       g_shm_supply_id); // Nota: g_kitchen, non g_supply
 
   // 2) SHM ruoli operatori
   g_shm_roles_id = allocate_shm(sizeof(WorkerConfig), FTOK_SHM_ROLES_ID);
-  if (g_shm_roles_id == -1)
+  if (g_shm_roles_id == -1) {
     return -1;
+  }
   g_worker_config = (WorkerConfig *)attach_shm(g_shm_roles_id);
 
   // coda messaggi & semafori
@@ -197,7 +206,7 @@ void set_role_parameters(OpType role, const Config *config,
     *range_percent = config->variability_cassa;
     break;
   default:
-    LOG_ERR("OPERATORE", "Ruolo sconosciuto: %s", ROLE_NAME(role));
+    LOG_ERR(log_tag, "Ruolo sconosciuto: %s", ROLE_NAME(role));
     exit(EXIT_FAILURE);
   }
 }
@@ -254,7 +263,7 @@ void attempt_pause(int sem_id, int sem_workstation_index, int *pauses_done,
     // SE ultimo rimasto (active <= 1), niente pausa
     if (active <= 1) {
       sem_mutex_release(sem_id, SEM_INDEX_MUTEX_STATS);
-      LOG_INFO("OPERATORE", "Pausa negata: unico operatore attivo per %s",
+      LOG_INFO(log_tag, "Pausa negata: unico operatore attivo per %s",
                ROLE_NAME(role));
       return;
     }
@@ -276,7 +285,7 @@ void attempt_pause(int sem_id, int sem_workstation_index, int *pauses_done,
     }
     sem_mutex_release(sem_id, SEM_INDEX_MUTEX_STATS);
 
-    LOG_INFO("OPERATORE", "Pausa %d/%d (Ruolo %s)", *pauses_done + 1,
+    LOG_INFO(log_tag, "Pausa %d/%d (Ruolo %s)", *pauses_done + 1,
              config.max_pauses_per_day, ROLE_NAME(role));
 
     // lascia il posto alla workstation
@@ -289,7 +298,7 @@ void attempt_pause(int sem_id, int sem_workstation_index, int *pauses_done,
     nanosleep(&t_pause, NULL);
     (*pauses_done)++;
 
-    LOG_INFO("OPERATORE", "Fine pausa. Attendo postazione...");
+    LOG_INFO(log_tag, "Fine pausa. Attendo postazione...");
 
     // Attendo postazione fisica per rientrare
     while (g_running) {
@@ -323,7 +332,7 @@ void attempt_pause(int sem_id, int sem_workstation_index, int *pauses_done,
 
     sem_mutex_release(sem_id, SEM_INDEX_MUTEX_STATS);
 
-    LOG_INFO("OPERATORE", "Rientrato in servizio.");
+    LOG_INFO(log_tag, "Rientrato in servizio.");
   }
 }
 
@@ -359,7 +368,8 @@ void service_cycle(int msg_id, int sem_id, int sem_index, long avg_time,
     if (strike_end > now) {
       double sleep_seconds = difftime(strike_end, now);
 
-      LOG_WARN("OPERATORE", "SCIOPERO! Mi fermo per %.0f secondi.",
+      LOG_INFO(log_tag,
+               COLOR_RED "SCIOPERO! Mi fermo per %.0f secondi." COLOR_RESET,
                sleep_seconds);
 
       struct timespec req = {(time_t)sleep_seconds, 0};
@@ -371,7 +381,7 @@ void service_cycle(int msg_id, int sem_id, int sem_index, long avg_time,
         }
       }
 
-      LOG_INFO("OPERATORE", "Sciopero terminato. Torno al lavoro.");
+      LOG_INFO(log_tag, "Sciopero terminato. Torno al lavoro.");
     }
 
     MessageRequest req;
@@ -461,18 +471,26 @@ int main(int argc, char *argv[]) {
   int my_id = atoi(argv[1]);
   const char *config_path = argv[2];
 
+  names_init();
+  log_tag = get_random_identity(ROLE_OPERATORE);
+
   Config config;
   if (parse_config(config_path, &config) == -1) {
-    LOG_ERR("OPERATORE", "Config parsing error: %s", config_path);
+    LOG_ERR(log_tag, "Config parsing error: %s", config_path);
     exit(EXIT_FAILURE);
   }
 
   if (setup_ipc() == -1) {
-    LOG_ERR("OPERATORE", "Errore IPC");
+    LOG_ERR(log_tag, "Errore IPC");
     exit(EXIT_FAILURE);
   }
 
-  LOG_INFO("OPERATORE", "Avviato ID %d", my_id);
+  sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
+  strncpy(g_worker_config->worker_names[my_id], log_tag, 63);
+  g_worker_config->worker_names[my_id][63] = '\0';
+  sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
+
+  LOG_INFO(log_tag, "Avviato ID %d", my_id);
 
   // LOOP GIORNI
   for (int day = 1; day <= config.simulation_duration_days; day++) {
@@ -490,7 +508,7 @@ int main(int argc, char *argv[]) {
                         &sem_workstation_index, &msg_type_req, &range_percent);
 
     // 1) competizione per la Workstation
-    LOG_CONF("OPERATORE", "Giorno %d: In coda per workstation ruolo %s...", day,
+    LOG_CONF(log_tag, "Giorno %d: In coda per workstation ruolo %s...", day,
              ROLE_NAME(my_role));
 
     bool acquired = false;
@@ -507,7 +525,7 @@ int main(int argc, char *argv[]) {
 
       // Se l'errore NON è un segnale (EINTR), è un errore vero
       if (errno != EINTR) {
-        LOG_ERR("OPERATORE", "Errore sem_wait workstation");
+        LOG_ERR(log_tag, "Errore sem_wait workstation");
         g_running = 0;
         break;
       }
@@ -523,7 +541,7 @@ int main(int argc, char *argv[]) {
     // 2) ramificazione logica:
     // "ho lavorato o la giornata è finita mentre aspettavo"
     if (acquired) {
-      LOG_INFO("OPERATORE", "Workstation acquisita. Inizio servizio.");
+      LOG_INFO(log_tag, "Workstation acquisita. Inizio servizio.");
 
       service_cycle(g_msg_id, g_sem_id, sem_workstation_index, avg_service_time,
                     msg_type_req, range_percent, my_role, config, my_id);
@@ -534,7 +552,7 @@ int main(int argc, char *argv[]) {
       // se non ho acquisito, significa che g_day_ended è diventato true mentre
       // ero in coda
       if (g_day_ended) {
-        LOG_INFO("OPERATORE", "Giorno %d terminato (senza workstation).", day);
+        LOG_INFO(log_tag, "Giorno %d terminato (senza workstation).", day);
       }
     }
 
@@ -545,7 +563,7 @@ int main(int argc, char *argv[]) {
     signal_end_of_day();
 
     if (g_running) {
-      LOG_INFO("OPERATORE", "Giorno %d terminato.", day);
+      LOG_INFO(log_tag, "Giorno %d terminato.", day);
     }
   }
 

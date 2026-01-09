@@ -1,6 +1,6 @@
 /**
  * @file utente.c
- * @brief Processo "Utente" (Cliente).
+ * @brief Processo log_tag (Cliente).
  *
  * Simula il ciclo di vita di un cliente nella mensa:
  * 1. Decide il menù (Primi, Secondi, o entrambi + Caffè opzionale)
@@ -24,6 +24,7 @@
 #include "common/logger.h"
 #include "common/stats.h"
 #include "common/types.h"
+#include "common/names.h"
 
 static int g_sem_id = -1;
 static int g_msg_id = -1;
@@ -32,6 +33,8 @@ static GlobalStats *g_stats = NULL;
 
 static volatile sig_atomic_t g_running = 1;
 static volatile sig_atomic_t g_day_ended = 0;
+
+char *log_tag = "UTENTE";
 
 /**
  * @brief Gestore segnali di terminazione
@@ -48,7 +51,7 @@ void wait_for_day_start() {
   struct sembuf sb = {SEM_INDEX_DAY_CHANGE, -1, 0};
   if (semop(g_sem_id, &sb, 1) == -1) {
     if (errno != EINTR) {
-      LOG_ERR("UTENTE", "Errore attesa inizio giorno");
+      LOG_ERR(log_tag, "Errore attesa inizio giorno");
     }
   }
 }
@@ -164,6 +167,9 @@ void cleanup_resources() {
   if (g_stats) {
     detach_shm(g_stats);
   }
+
+  free(log_tag);
+  names_destroy();
 }
 
 /**
@@ -181,7 +187,7 @@ int enter_queue(int sem_index, const char *queue_name, int timeout_sec) {
     return -1;
   }
 
-  LOG_INFO("UTENTE", "Tento accesso coda %s...", queue_name);
+  LOG_INFO(log_tag, "Tento accesso coda %s...", queue_name);
 
   struct sembuf sb;
   sb.sem_num = (unsigned short)sem_index;
@@ -197,18 +203,18 @@ int enter_queue(int sem_index, const char *queue_name, int timeout_sec) {
 
     // timeout scaduto (coda troppo lenta)
     if (errno == EAGAIN) {
-      LOG_WARN("UTENTE", "Coda %s troppo lenta! Rinuncio all'accesso.",
+      LOG_WARN(log_tag, "Coda %s troppo lenta! Rinuncio all'accesso.",
                queue_name);
       return -1;
     }
 
     // interruzione segnale (fine giornata)
     if (errno == EINTR) {
-      LOG_WARN("UTENTE", "Mensa chiusa mentre ero in coda %s!", queue_name);
+      LOG_WARN(log_tag, "Mensa chiusa mentre ero in coda %s!", queue_name);
       return -1;
     }
 
-    LOG_ERR("UTENTE", "Errore semtimedop su coda %s", queue_name);
+    LOG_ERR(log_tag, "Errore semtimedop su coda %s", queue_name);
     return -1;
   }
 
@@ -241,14 +247,14 @@ int perform_order(OpType type, int msg_type, double amount, bool has_ticket) {
   req.wants_ticket = has_ticket;
 
   if (type == OP_CASSA) {
-    LOG_INFO("UTENTE", "Vado alla Cassa per pagare %.2f€...", amount);
+    LOG_INFO(log_tag, "Vado alla Cassa per pagare %.2f€...", amount);
   } else {
-    LOG_INFO("UTENTE", "Ordino %s...", ROLE_NAME(type));
+    LOG_INFO(log_tag, "Ordino %s...", ROLE_NAME(type));
   }
 
   if (send_message(g_msg_id, &req, REQ_PAYLOAD_SIZE, 0) == -1) {
     if (errno != EINTR) {
-      LOG_ERR("UTENTE", "Errore invio richiesta %s", ROLE_NAME(type));
+      LOG_ERR(log_tag, "Errore invio richiesta %s", ROLE_NAME(type));
     }
     return -1;
   }
@@ -261,20 +267,20 @@ int perform_order(OpType type, int msg_type, double amount, bool has_ticket) {
     // se fallisce (es. fine giornata mentre aspetto):
     // => logga solo se non è EINTR pulito
     if (errno != EINTR) {
-      LOG_ERR("UTENTE", "Nessuna risposta da %s", ROLE_NAME(type));
+      LOG_ERR(log_tag, "Nessuna risposta da %s", ROLE_NAME(type));
       // mark_as_refused();
     }
     return -1;
   }
 
   if (resp.status == ORDER_SOLD_OUT) {
-    LOG_WARN("UTENTE", "Operatore PID %d dice: Piatto Terminato!",
+    LOG_WARN(log_tag, "Operatore PID %d dice: Piatto Terminato!",
              resp.operator_pid);
     return -2;
   }
 
   if (type != OP_CASSA) {
-    LOG_INFO("UTENTE", "Ricevuto un %s da Operatore %d.",
+    LOG_INFO(log_tag, "Ricevuto un %s da Operatore %d.",
              ROLE_NAME_SINGULAR(type), resp.operator_pid);
   }
   // ELSE scontrino stampato in user_routine dopo il return
@@ -291,12 +297,12 @@ void consume_meal(Config *cfg) {
     return;
   }
 
-  LOG_INFO("UTENTE", "Cerco tavolo...");
+  LOG_INFO(log_tag, "Cerco tavolo...");
   if (sem_wait(g_sem_id, SEM_INDEX_TABLES) == -1) {
     return;
   }
 
-  LOG_INFO("UTENTE", "Mangio...");
+  LOG_INFO(log_tag, "Mangio...");
 
   struct timespec t;
   t.tv_sec = 0;
@@ -305,7 +311,7 @@ void consume_meal(Config *cfg) {
   nanosleep(&t, NULL);
 
   sem_signal(g_sem_id, SEM_INDEX_TABLES);
-  LOG_INFO("UTENTE", "Pasto finito, libero tavolo.");
+  LOG_INFO(log_tag, "Pasto finito, libero tavolo.");
 }
 
 /**
@@ -321,17 +327,17 @@ void consume_main_meal(Config *cfg, bool has_food) {
     return;
   }
 
-  LOG_INFO("UTENTE", "Cerco tavolo per mangiare...");
+  LOG_INFO(log_tag, "Cerco tavolo per mangiare...");
   if (sem_wait(g_sem_id, SEM_INDEX_TABLES) == -1) {
     return;
   }
 
-  LOG_INFO("UTENTE", "Mangio al tavolo...");
+  LOG_INFO(log_tag, "Mangio al tavolo...");
   struct timespec t = {0, cfg->user_meal_duration_ns};
   nanosleep(&t, NULL);
 
   sem_signal(g_sem_id, SEM_INDEX_TABLES);
-  LOG_INFO("UTENTE", "Pasto finito, libero tavolo.");
+  LOG_INFO(log_tag, "Pasto finito, libero tavolo.");
 }
 
 /**
@@ -343,10 +349,10 @@ void consume_coffee_bar(Config *cfg) {
     return;
   }
 
-  LOG_INFO("UTENTE", "Bevo caffè al bancone...");
+  LOG_INFO(log_tag, "Bevo caffè al bancone...");
   struct timespec t = {0, cfg->user_coffee_duration_ns};
   nanosleep(&t, NULL);
-  LOG_INFO("UTENTE", "Caffè finito.");
+  LOG_INFO(log_tag, "Caffè finito.");
 }
 
 /**
@@ -370,7 +376,7 @@ void user_routine(Config *cfg, double *current_budget, bool has_ticket) {
   if (has_ticket && g_running && !g_day_ended) {
     if (enter_queue(SEM_INDEX_TICKET_READER, "TICKET_READER",
                     cfg->user_queue_timeout_sec) == 0) {
-      LOG_INFO("UTENTE", "Valido il ticket...");
+      LOG_INFO(log_tag, "Valido il ticket...");
       struct timespec t = {0, cfg->ticket_reader_timeout_ns};
       nanosleep(&t, NULL);
       sem_signal(g_sem_id, SEM_INDEX_TICKET_READER);
@@ -378,7 +384,7 @@ void user_routine(Config *cfg, double *current_budget, bool has_ticket) {
       // timeout sul lettore ticket
       // => mangia senza sconto
       has_ticket = 0;
-      LOG_WARN("UTENTE",
+      LOG_WARN(log_tag,
                "Non sono riuscito a validare il ticket. Mangio senza sconto.");
     }
   }
@@ -422,7 +428,7 @@ void user_routine(Config *cfg, double *current_budget, bool has_ticket) {
 
   if (conto_da_pagare <= 0.001) {
     mark_as_poverty();
-    LOG_WARN("UTENTE", "Oggi troppo povero (ho solo %.2f€). Salto il pasto.",
+    LOG_WARN(log_tag, "Oggi troppo povero (ho solo %.2f€). Salto il pasto.",
              *current_budget);
     return;
   }
@@ -444,7 +450,7 @@ void user_routine(Config *cfg, double *current_budget, bool has_ticket) {
         conto_da_pagare -= cfg->price_primi;
 
         if (!wants_secondo && *current_budget >= cfg->price_secondi) {
-          LOG_INFO("UTENTE", "Primo finito. Ripiego su SECONDO.");
+          LOG_INFO(log_tag, "Primo finito. Ripiego su SECONDO.");
           wants_secondo = true;
           *current_budget -= cfg->price_secondi;
           conto_da_pagare += cfg->price_secondi;
@@ -474,7 +480,7 @@ void user_routine(Config *cfg, double *current_budget, bool has_ticket) {
 
         // fallback caffè
         if (!wants_caffe && *current_budget >= cfg->price_caffe) {
-          LOG_INFO("UTENTE", "Secondo finito. Ripiego su CAFFE.");
+          LOG_INFO(log_tag, "Secondo finito. Ripiego su CAFFE.");
           wants_caffe = true;
           *current_budget -= cfg->price_caffe;
           conto_da_pagare += cfg->price_caffe;
@@ -489,7 +495,7 @@ void user_routine(Config *cfg, double *current_budget, bool has_ticket) {
 
   if (!got_primo && !got_secondo && !wants_caffe && !g_day_ended) {
     mark_as_refused();
-    LOG_INFO("UTENTE", "Oggi non mangio niente. Esco.");
+    LOG_INFO(log_tag, "Oggi non mangio niente. Esco.");
     return;
   }
 
@@ -507,7 +513,7 @@ void user_routine(Config *cfg, double *current_budget, bool has_ticket) {
 
     if (*current_budget < importo_effettivo) {
       mark_as_poverty();
-      LOG_WARN("UTENTE", "Budget insufficiente anche con sconto. Esco.");
+      LOG_WARN(log_tag, "Budget insufficiente anche con sconto. Esco.");
       return;
     }
 
@@ -529,7 +535,7 @@ void user_routine(Config *cfg, double *current_budget, bool has_ticket) {
 
         char *log_msg = has_ticket ? "scontato ticket" : "prezzo intero";
 
-        LOG_INFO("UTENTE", "Pagato %.2f€ [%s]", importo_effettivo, log_msg);
+        LOG_INFO(log_tag, "Pagato %.2f€ [%s]", importo_effettivo, log_msg);
         paid = true;
       }
       sem_signal(g_sem_id, SEM_INDEX_SEATS_CASSA);
@@ -539,7 +545,7 @@ void user_routine(Config *cfg, double *current_budget, bool has_ticket) {
   // sciopero cassa o timeout
   if (!paid && conto_da_pagare > 0.001) {
     mark_as_refused();
-    LOG_WARN("UTENTE", "Impossibile pagare. Abbandono il vassoio ed esco.");
+    LOG_WARN(log_tag, "Impossibile pagare. Abbandono il vassoio ed esco.");
     return;
   }
 
@@ -565,11 +571,11 @@ void user_routine(Config *cfg, double *current_budget, bool has_ticket) {
       } else if (res == -2) {
         // TEORICAMENTE non dovrebbe succedere => caffè infinito (soglia molto
         // alta)
-        LOG_WARN("UTENTE", "Caffè finito! Ho pagato per nulla :(");
+        LOG_WARN(log_tag, "Caffè finito! Ho pagato per nulla :(");
       }
       sem_signal(g_sem_id, SEM_INDEX_SEATS_CAFFE);
     } else {
-      LOG_WARN("UTENTE", "Coda caffè impossibile. Rinuncio al caffè pagato.");
+      LOG_WARN(log_tag, "Coda caffè impossibile. Rinuncio al caffè pagato.");
     }
   }
 }
@@ -602,6 +608,9 @@ int main(int argc, char *argv[]) {
                         ? true
                         : (bool)temp_val;
 
+  names_init();
+  log_tag = get_random_identity(ROLE_UTENTE);
+
   Config config;
   if (parse_config(config_path, &config) == -1) {
     exit(EXIT_FAILURE);
@@ -614,7 +623,7 @@ int main(int argc, char *argv[]) {
   double my_budget =
       random_range(config.user_budget_min, config.user_budget_max, rand);
 
-  LOG_INFO("UTENTE", "Cliente arrivato in mensa. Patrimonio iniziale: %.2f€",
+  LOG_INFO(log_tag, "Cliente arrivato in mensa. Patrimonio iniziale: %.2f€",
            my_budget);
 
   for (int day = 1; day <= config.simulation_duration_days && g_running;
@@ -645,7 +654,7 @@ int main(int argc, char *argv[]) {
       my_budget = config.user_budget_max;
     }
 
-    LOG_INFO("UTENTE", "Giorno %d: Ricevuto stipendio %.2f€. Totale: %.2f€",
+    LOG_INFO(log_tag, "Giorno %d: Ricevuto stipendio %.2f€. Totale: %.2f€",
              day, daily_salary, my_budget);
 
     if (config.user_max_arrival_delay_us > 0) {
@@ -659,7 +668,7 @@ int main(int argc, char *argv[]) {
 
     user_routine(&config, &my_budget, has_ticket);
 
-    LOG_INFO("UTENTE", "Finito il pasto, attendo chiusura mensa (Giorno %d)...",
+    LOG_INFO(log_tag, "Finito il pasto, attendo chiusura mensa (Giorno %d)...",
              day);
 
     // race condition fixed!

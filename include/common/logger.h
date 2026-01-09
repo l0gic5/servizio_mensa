@@ -15,6 +15,8 @@
 #define COLOR_PINK "\x1b[95m"
 #define COLOR_CYAN "\x1b[36m"
 #define COLOR_ORANGE "\x1b[38;5;208m"
+#define COLOR_DARK_GRAY "\x1b[90m"
+#define COLOR_LIGHT_GRAY "\x1b[37m"
 #define COLOR_RESET "\x1b[0m"
 
 #define FLUSH_LOGS                                                             \
@@ -32,7 +34,7 @@
 
 #define LOG_DEBUG(ctx, msg, ...)                                               \
   fprintf(stdout,                                                              \
-          COLOR_ORANGE "[%s]" COLOR_PURPLE "(%d) " COLOR_ORANGE                \
+          COLOR_ORANGE "%s" COLOR_PURPLE "(%d) " COLOR_ORANGE                  \
                        "DEBUG: " msg COLOR_RESET "\n",                         \
           ctx, getpid(), ##__VA_ARGS__)
 
@@ -57,14 +59,13 @@
               : "IGNOTO")
 
 #define LOG_INFO(ctx, msg, ...)                                                \
-  fprintf(stdout,                                                              \
-          COLOR_GREEN "[%s]" COLOR_PURPLE "(%d) " COLOR_RESET msg "\n", ctx,   \
-          getpid(), ##__VA_ARGS__)
+  fprintf(stdout, COLOR_GREEN "%s " COLOR_PURPLE "(%d) " COLOR_RESET msg "\n", \
+          ctx, getpid(), ##__VA_ARGS__)
 
 #define LOG_CONF(ctx, msg, ...)                                                \
   do {                                                                         \
     fprintf(stdout,                                                            \
-            COLOR_PINK "[%s]" COLOR_PURPLE "(%d) " COLOR_PINK                  \
+            COLOR_PINK "%s " COLOR_PURPLE "(%d) " COLOR_PINK                   \
                        "CONF: " msg COLOR_RESET "\n",                          \
             ctx, getpid(), ##__VA_ARGS__);                                     \
     fflush(stdout);                                                            \
@@ -72,14 +73,21 @@
 
 #define LOG_WARN(ctx, msg, ...)                                                \
   fprintf(stdout,                                                              \
-          COLOR_YELLOW "[%s]" COLOR_PURPLE "(%d) " COLOR_YELLOW                \
+          COLOR_YELLOW "%s " COLOR_PURPLE "(%d) " COLOR_YELLOW                 \
                        "WARNING: " msg COLOR_RESET "\n",                       \
           ctx, getpid(), ##__VA_ARGS__)
 
 #define LOG_ERR(ctx, msg, ...)                                                 \
   fprintf(stderr,                                                              \
-          COLOR_RED "[%s]" COLOR_PURPLE "(%d) " COLOR_RED                      \
+          COLOR_RED "%s " COLOR_PURPLE "(%d) " COLOR_RED                       \
                     "ERROR: " msg COLOR_RESET "\n",                            \
           ctx, getpid(), ##__VA_ARGS__)
 
+#define SIMULATION_HEADER                                                      \
+  "       .   ~   ~   ~   ~   ~   ~   .       \n"                              \
+  "   ~  .  -------------------------  .  ~   \n"                              \
+  " ~  (        Oasi del Golfo       )  ~ \n"                                  \
+  "~    )         Da Marina         (    ~\n"                                  \
+  "   ~  '  -------------------------  '  ~   \n"                              \
+  "       ^   ~   ~   ~   ~   ~   ~   ^       \n"
 #endif
