@@ -25,9 +25,14 @@ struct test_msg_buf {
  */
 static void clean_stale_ipc_resources(void) {
   // shared memory (provo con le chiavi standard)
-  int proj_ids[] = {FTOK_SHM_ID, FTOK_SHM_ROLES_ID};
+  int proj_ids[] = {
+      FTOK_SHM_ID,
+      FTOK_SHM_ROLES_ID,
+      FTOK_SHM_SUPPLY_ID,
+      FTOK_SHM_GROUPS_ID,
+  };
 
-  for (int i = 0; i < 2; i++) {
+  for (int i = 0; i < 4; i++) {
     key_t key = get_project_ipc_key(proj_ids[i]);
     if (key != -1) {
       int id = shmget(key, 0, 0666);

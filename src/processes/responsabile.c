@@ -114,6 +114,9 @@ void remove_ipc_resources(void) {
   if (g_shm_roles_id != -1) {
     remove_shm(g_shm_roles_id);
   }
+  if (g_shm_groups_id != -1) {
+    remove_shm(g_shm_groups_id);
+  }
 
   kill(0, SIGTERM);
   while (wait(NULL) > 0) {
