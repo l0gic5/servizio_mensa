@@ -594,7 +594,21 @@ void handle_final_stats(int days_completed) {
  * Aggiunge porzioni fino al raggiungimento della capacità massima.
  */
 void perform_periodic_refill() {
+  long refill_duration_ns = (long)random_variance(
+      (double)g_config.avg_refill_time_ns, 
+      (double)g_config.refill_variance_percent,
+      rand
+  );
+
+  struct timespec t_refill = {0, refill_duration_ns};
+  if (refill_duration_ns >= 1000000000L) {
+      t_refill.tv_sec = refill_duration_ns / 1000000000L;
+      t_refill.tv_nsec = refill_duration_ns % 1000000000L;
+  }
+
   sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
+
+  nanosleep(&t_refill, NULL);
 
   bool refilled = false;
 
@@ -664,8 +678,8 @@ void perform_periodic_refill() {
   }
 
   if (refilled) {
-    LOG_INFO(log_tag, "Refill periodico (%d min) eseguito.",
-             g_config.refill_interval_minutes);
+    LOG_INFO(log_tag, "Refill periodico (ogni %d min) eseguito in %.2f ms", 
+             g_config.refill_interval_minutes, (double)refill_duration_ns / 1000000.0);
   }
   // else {
   //   LOG_INFO(log_tag, "Refill non necessario (cucina piena).");

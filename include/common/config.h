@@ -102,7 +102,7 @@ typedef struct config {
   int user_min_daily_salary; // USER_MIN_DAILY_SALARY
   int user_max_daily_salary; // USER_MAX_DAILY_SALARY
 
-  int max_groups; // MAX_GROUPS
+  int max_groups;          // MAX_GROUPS
   int max_users_per_group; // MAX_USERS_PER_GROUP
 
   ///////////////////////////////////
@@ -112,13 +112,14 @@ typedef struct config {
   int refill_interval_minutes; // REFILL_INTERVAL_MINUTES
   int refill_variance_percent; // REFILL_VARIANCE_PERCENT
 
-  int avg_refill_primi;        // AVG_REFILL_PRIMI
-  int avg_refill_secondi;      // AVG_REFILL_SECONDI
-  int avg_refill_caffe;        // AVG_REFILL_CAFFE
+  int avg_refill_time_ns; // AVG_REFILL_TIME_NS
+  int avg_refill_primi;   // AVG_REFILL_PRIMI
+  int avg_refill_secondi; // AVG_REFILL_SECONDI
+  int avg_refill_caffe;   // AVG_REFILL_CAFFE
 
-  int max_porzioni_primi;      // MAX_PORZIONI_PRIMI
-  int max_porzioni_secondi;    // MAX_PORZIONI_SECONDI
-  int max_porzioni_caffe;      // MAX_PORZIONI_CAFFE
+  int max_porzioni_primi;   // MAX_PORZIONI_PRIMI
+  int max_porzioni_secondi; // MAX_PORZIONI_SECONDI
+  int max_porzioni_caffe;   // MAX_PORZIONI_CAFFE
 
   ////////////////
   //  8) TOOLS  //

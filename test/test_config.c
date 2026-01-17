@@ -99,6 +99,7 @@ static int count_config_differences(const Config *a, const Config *b) {
   // 7) LOGISTICA
   CMP_INT(refill_interval_minutes);
   CMP_INT(refill_variance_percent);
+  CMP_INT(avg_refill_time_ns);
   CMP_INT(avg_refill_primi);
   CMP_INT(avg_refill_secondi);
   CMP_INT(avg_refill_caffe);
@@ -268,6 +269,8 @@ void test_coherence_with_real_default_file(void) {
   TEST_ASSERT_EQUAL_INT_MESSAGE(20, config.refill_variance_percent,
                                 "refill_variance_percent");
 
+  TEST_ASSERT_EQUAL_INT_MESSAGE(50000000, config.avg_refill_time_ns,
+                                "avg_refill_time_ns");
   TEST_ASSERT_EQUAL_INT_MESSAGE(20, config.avg_refill_primi,
                                 "avg_refill_primi");
   TEST_ASSERT_EQUAL_INT_MESSAGE(20, config.avg_refill_secondi,
@@ -415,6 +418,7 @@ void test_full_configuration_override(void) {
   // LOGISTICA (8)
   fprintf(f, "REFILL_INTERVAL_MINUTES=999\n");
   fprintf(f, "REFILL_VARIANCE_PERCENT=99\n");
+  fprintf(f, "AVG_REFILL_TIME_NS=999\n");
   fprintf(f, "AVG_REFILL_PRIMI=999\n");
   fprintf(f, "AVG_REFILL_SECONDI=999\n");
   fprintf(f, "AVG_REFILL_CAFFE=999\n");

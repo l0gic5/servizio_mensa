@@ -212,7 +212,9 @@ static void apply_config_parameter(Config *config, const char *key,
     config->refill_variance_percent = atoi(value);
   }
 
-  else if (strcmp(key, "AVG_REFILL_PRIMI") == 0) {
+  else if (strcmp(key, "AVG_REFILL_TIME_NS") == 0) {
+    config->avg_refill_time_ns = atoi(value);
+  } else if (strcmp(key, "AVG_REFILL_PRIMI") == 0) {
     config->avg_refill_primi = atoi(value);
   } else if (strcmp(key, "AVG_REFILL_SECONDI") == 0) {
     config->avg_refill_secondi = atoi(value);
@@ -336,6 +338,7 @@ static void set_default_values(Config *config) {
   config->refill_interval_minutes = 10;
   config->refill_variance_percent = 20;
 
+  config->avg_refill_time_ns = 50000000;
   config->avg_refill_primi = 20;
   config->avg_refill_secondi = 20;
   config->avg_refill_caffe = 500;
