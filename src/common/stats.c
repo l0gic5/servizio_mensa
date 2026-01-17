@@ -162,8 +162,12 @@ static char *generate_csv_path(const char *folder, const char *prefix,
  * @brief Assicura che l'header esista nel file (utile per append).
  */
 static void ensure_csv_header(const char *path) {
-  if (access(path, F_OK) == 0) {
-    return;
+  struct stat st;
+
+  if (stat(path, &st) == 0) {
+    if (st.st_size > 0) {
+      return;
+    }
   }
 
   FILE *f = fopen(path, "w");

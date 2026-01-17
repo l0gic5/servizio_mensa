@@ -47,6 +47,7 @@ static GlobalStats *g_stats = NULL;
 static KitchenState *g_kitchen = NULL;
 static WorkerConfig *g_worker_config = NULL;
 static GroupState *g_groups = NULL;
+static int g_daily_group_count = 0;
 
 static volatile sig_atomic_t g_shutdown = 0;
 
@@ -528,6 +529,8 @@ void start_all_processes(const char *config_path) {
   sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
   g_worker_config->total_workers_count = g_config.nof_workers;
   g_worker_config->active_primi = w_primi;
+
+  g_daily_group_count = g_stats->total_groups_created;
   sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
 
   sleep((unsigned int)g_config.system_startup_delay_sec);
@@ -813,6 +816,8 @@ static void setup_day_start(int day, GlobalStats *start_snapshot) {
     g_kitchen->remaining_secondi = g_config.max_porzioni_secondi;
     g_kitchen->remaining_caffe = g_config.max_porzioni_caffe;
     LOG_CONF(log_tag, "Cucina rifornita (Day Start).");
+
+    g_stats->total_groups_created += g_daily_group_count;
   }
 
   *start_snapshot = *g_stats;
@@ -875,8 +880,7 @@ static void compute_daily_report(DailyReport *report, int day,
   report->daily_users_refused =
       end->total_users_refused - start->total_users_refused;
 
-  report->daily_groups_created =
-      end->total_groups_created - start->total_groups_created;
+  report->daily_groups_created = g_daily_group_count;
   report->daily_group_wait_time =
       end->total_group_wait_time - start->total_group_wait_time;
 
