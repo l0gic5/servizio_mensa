@@ -134,6 +134,18 @@ make clean
 
 Il codice è commentato secondo lo standard **Doxygen**. Per generare la documentazione HTML navigabile:
 
+### Setup
+
+Come già riportato nel file [`docs/INSTALL.md`](./docs/INSTALL.md):
+
+```bash
+cd docs
+
+git clone https://github.com/jothepro/doxygen-awesome-css.git
+```
+
+### Utilizzo
+
 ```bash
 make docs
 ```
