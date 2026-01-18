@@ -1,11 +1,5 @@
 #include "common/menu.h"
 
-typedef struct {
-  Dish *dishes;
-  int count;
-  int capacity;
-} DishList;
-
 static DishList all_primi = {0};
 static DishList all_secondi = {0};
 static DishList all_dolci = {0};

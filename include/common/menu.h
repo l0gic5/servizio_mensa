@@ -10,6 +10,12 @@
 #include "common/logger.h"
 #include "types.h"
 
+typedef struct dish_list {
+  Dish *dishes;
+  int count;
+  int capacity;
+} DishList;
+
 /**
  * @brief Carica il file in una lista interna (chiamato solo dal Responsabile)
  *

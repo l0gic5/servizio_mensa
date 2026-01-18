@@ -5,7 +5,8 @@ PROJECT_NUMBER = "1.0"
 PROJECT_BRIEF = "SO final project"
 
 # input
-INPUT = ./src \
+INPUT = ./include \
+        ./src \
         ./README.md
 FILE_PATTERNS = *.h *.c
 RECURSIVE = YES
