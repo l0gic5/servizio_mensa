@@ -240,6 +240,7 @@ int update_active_count(OpType role, int delta) {
     g_worker_config->active_cassa += delta;
     current_val = g_worker_config->active_cassa;
     break;
+  default:
   }
   return current_val;
 }
@@ -418,10 +419,18 @@ void service_cycle(int msg_id, int sem_id, int sem_index, long avg_time,
         }
         break;
       case OP_CAFFE:
-        if (g_kitchen->remaining_caffe > 0) {
-          g_kitchen->remaining_caffe--;
-          g_stats->total_plates_caffe++;
-          order_status = ORDER_SUCCESS;
+        if (req.food_choice[MSG_REQ_DOLCE_INDEX]) {
+          if (g_kitchen->remaining_dolci > 0) {
+            g_kitchen->remaining_dolci--;
+            g_stats->total_plates_dolci++;
+            order_status = ORDER_SUCCESS;
+          }
+        } else if (req.food_choice[MSG_REQ_CAFFE_INDEX]) {
+          if (g_kitchen->remaining_caffe > 0) {
+            g_kitchen->remaining_caffe--;
+            g_stats->total_plates_caffe++;
+            order_status = ORDER_SUCCESS;
+          }
         }
         break;
       case OP_CASSA:

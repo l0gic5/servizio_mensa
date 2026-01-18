@@ -1,0 +1,125 @@
+P|Pasta al Pomodoro
+P|Risotto alla Milanese
+P|Tortellini Panna e Prosciutto
+P|Zuppa di Legumi
+P|Spaghetti alla Carbonara
+P|Penne all'Arrabbiata
+P|Lasagna alla Bolognese
+P|Risotto ai Funghi Porcini
+P|Spaghetti alle Vongole
+P|Gnocchi al Gorgonzola
+P|Pasta e Fagioli
+P|Minestrone di Verdure
+P|Orecchiette alle Cime di Rapa
+P|Ravioli Burro e Salvia
+P|Tagliatelle al Ragu
+P|Pasta alla Norma
+P|Risotto agli Asparagi
+P|Penne alla Vodka
+P|Farfalle al Salmone
+P|Paccheri al Sugo di Carne
+P|Bucatini all'Amatriciana
+P|Pasta e Ceci
+P|Spaghetti Cacio e Pepe
+P|Trofie al Pesto Genovese
+P|Vellutata di Zucca
+P|Spaghetti allo Scoglio
+P|Risotto alla Zucca e Salsiccia
+P|Insalata di Riso
+P|Gnocchi alla Sorrentina
+P|Zuppa di Cipolle
+P|Polenta e Funghi
+P|Crespelle agli Spinaci
+
+S|Cotoletta alla Milanese
+S|Branzino al Forno
+S|Pollo Arrosto
+S|Frittata di Zucchine
+S|Bistecca ai Ferri
+S|Pollo al Curry con Riso
+S|Arrosto di Vitello
+S|Scaloppine al Limone
+S|Salmone alla Griglia
+S|Polpette al Sugo
+S|Frittura di Calamari
+S|Melanzane alla Parmigiana
+S|Hamburger di Manzo
+S|Spezzatino con Patate
+S|Filetto di Orata
+S|Tagliata di Manzo con Rucola
+S|Salsiccia e Friarielli
+S|Omelette Prosciutto e Formaggio
+S|Tacchino Arrosto
+S|Coniglio alla Cacciatora
+S|Merluzzo in Umido
+S|Insalatona Mista con Tonno
+S|Caprese Mozzarella e Pomodoro
+S|Vitello Tonnato
+S|Pesce Spada alla Griglia
+S|Involtini di Carne
+S|Seppie con Piselli
+S|Roast Beef all'Inglese
+S|Cotoletta di Pollo
+S|Spiedini Misti di Carne
+S|Formaggio alla Piastra
+S|Saltimbocca alla Romana
+S|Ossobuco alla Milanese
+
+D|Tiramisu
+D|Panna Cotta
+D|Torta alle Mele
+D|Crostata di Frutta
+D|Profiteroles al Cioccolato
+D|Cannolo Siciliano
+D|Cheesecake ai Frutti di Bosco
+D|Macedonia di Frutta Fresca
+D|Gelato al Cioccolato
+D|Sorbetto al Limone
+D|Torta della Nonna
+D|Creme Caramel
+D|Budino al Cioccolato
+D|Zuppa Inglese
+D|Baba al Rum
+D|Semifreddo al Torroncino
+D|Mousse al Cioccolato
+D|Strudel di Mele
+D|Torta al Limone
+D|Coppa Fragole con Panna
+D|Ananas Fresco
+D|Torta Sacher
+D|Biscotti Cantucci e Vin Santo
+D|Torta Caprese
+D|Panettone
+D|Pandoro con Crema Mascarpone
+D|Pesca Melba
+D|Yogurt Greco con Miele
+D|Affogato al Caffe
+D|Crema Catalana
+D|Millefoglie alla Crema
+D|Tartufi di Cioccolato
+
+
+C|Caffè Espresso
+C|Caffè Decaffeinato
+C|Caffè Macchiato Caldo
+C|Caffè Macchiato Freddo
+C|Caffè Ginseng
+C|Caffè d'Orzo
+C|Caffè Lungo
+C|Caffè Ristretto
+C|Caffè Macchiato Freddo
+C|Caffè Schiumato
+C|Caffè Corretto Grappa
+C|Caffè Corretto Sambuca
+C|Caffè Americano
+C|Caffè Shakerato
+C|Caffè con Panna
+C|Caffè Marocchino
+C|Caffè d'Orzo Macchiato
+C|Caffè Ginseng Grande
+C|Cappuccino
+C|Cappuccino Decaffeinato
+C|Cappuccino d'Orzo
+C|Cappuccino di Soia
+C|Latte Macchiato
+C|Latte Caldo

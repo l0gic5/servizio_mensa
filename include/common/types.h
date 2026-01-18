@@ -14,29 +14,33 @@
 // semafori (code utenti)
 #define SEM_INDEX_SEATS_PRIMI 0
 #define SEM_INDEX_SEATS_SECONDI 1
-#define SEM_INDEX_SEATS_CAFFE 2
-#define SEM_INDEX_SEATS_CASSA 3
-#define SEM_INDEX_TICKET_READER 4
+#define SEM_INDEX_SEATS_DOLCI 2
+#define SEM_INDEX_SEATS_CAFFE 3
+#define SEM_INDEX_SEATS_CASSA 4
+#define SEM_INDEX_TICKET_READER 5
 
 // semafori (risorse)
-#define SEM_INDEX_TABLES 5
-#define SEM_INDEX_MUTEX_STATS 6
-#define SEM_INDEX_OUTPUT 7
-#define SEM_INDEX_BARRIER 8
+#define SEM_INDEX_TABLES 6
+#define SEM_INDEX_MUTEX_STATS 7
+#define SEM_INDEX_OUTPUT 8
+#define SEM_INDEX_BARRIER 9
 
 // semafori (operatori)
-#define SEM_OPERATORS_PRIMI 9
-#define SEM_OPERATORS_SECONDI 10
-#define SEM_OPERATORS_CAFFE 11
-#define SEM_OPERATORS_CASSA 12
+#define SEM_OPERATORS_PRIMI 10
+#define SEM_OPERATORS_SECONDI 11
+#define SEM_OPERATORS_CAFFE 12
+#define SEM_OPERATORS_CASSA 13
 
-#define SEM_INDEX_DAY_CHANGE 13
+#define SEM_INDEX_DAY_CHANGE 14
 
 #define MAX_GROUPS 100
-#define SEM_GROUP_BARRIER_BASE 14
+#define SEM_GROUP_BARRIER_BASE 15
 
-#define TOTAL_SEMS (14 + MAX_GROUPS)
+#define TOTAL_SEMS (15 + MAX_GROUPS)
 #define MAX_WORKERS 100
+
+#define MAX_DISH_NAME 32
+#define MAX_DAILY_OFFER 30
 
 typedef struct worker_config {
   // indice worker -> enum OpType
@@ -62,22 +66,48 @@ typedef struct group_state {
 //  DATA STATES  //
 ///////////////////
 
+typedef struct dish {
+  char name[MAX_DISH_NAME];
+  char type; // 'P', 'S', 'D', 'C'
+} Dish;
+
+typedef struct daily_menu {
+  Dish daily_primi[MAX_DAILY_OFFER];
+  Dish daily_secondi[MAX_DAILY_OFFER];
+  Dish daily_dolci[MAX_DAILY_OFFER];
+  Dish daily_caffe[MAX_DAILY_OFFER];
+  
+  int primi_count;
+  int secondi_count;
+  int dolci_count;
+  int caffe_count;
+} DailyMenu;
+
 typedef struct kitchen_state {
   int remaining_primi;
   int remaining_secondi;
+  int remaining_dolci;
   int remaining_caffe;
+
+  DailyMenu todays_menu;
 } KitchenState;
 
 /////////////////////////////////
 //  MESSAGGIO (msgsnd/msgrcv)  //
 /////////////////////////////////
 
+// [0]=Primo, [1]=Secondo, [2]=Dolce, [3]=Caffè
+#define MSG_REQ_PRIMO_INDEX 0
+#define MSG_REQ_SECONDO_INDEX 1
+#define MSG_REQ_DOLCE_INDEX 2
+#define MSG_REQ_CAFFE_INDEX 3
+
 typedef struct message_request {
   long mtype;
   pid_t sender_pid;
-
-  // [0]=Primo, [1]=Secondo, [2]=Caffè (flag booleani)
-  int food_choice[3];
+  
+  // [0]=Primo, [1]=Secondo, [2]=Dolce, [3]=Caffè (flag booleani)
+  int food_choice[4];
 
   int wants_ticket;
   double total_cost;
@@ -99,6 +129,7 @@ typedef struct message_response {
 
 #define RES_PAYLOAD_SIZE (sizeof(MessageResponse) - sizeof(long))
 
-typedef enum { OP_PRIMI = 0, OP_SECONDI, OP_CAFFE, OP_CASSA } OpType;
+// OP_DOLCI non usato come ruolo operatore
+typedef enum { OP_PRIMI = 0, OP_SECONDI, OP_DOLCI, OP_CAFFE, OP_CASSA } OpType;
 
 #endif

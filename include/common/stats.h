@@ -24,22 +24,26 @@ typedef struct global_stats {
   // piatti distribuiti
   int total_plates_primi;
   int total_plates_secondi;
+  int total_plates_dolci;
   int total_plates_caffe;
 
   // accumulatori tempo di attesa
   double total_wait_time_primi;
   double total_wait_time_secondi;
+  double total_wait_time_dolci;
   double total_wait_time_caffe;
   double total_wait_time_cassa;
 
   // leftover
   int total_leftover_primi;
   int total_leftover_secondi;
+  int total_leftover_dolci;
   int total_leftover_caffe;
 
   // refill
   int total_refilled_primi;
   int total_refilled_secondi;
+  int total_refilled_dolci;
   int total_refilled_caffe;
 
   double total_revenue;
@@ -61,11 +65,13 @@ typedef struct daily_report {
 
   int daily_plates_primi;
   int daily_plates_secondi;
+  int daily_plates_dolci;
   int daily_plates_caffe;
 
   // delta tempi attesa
   double daily_wait_primi;
   double daily_wait_secondi;
+  double daily_wait_dolci;
   double daily_wait_caffe;
   double daily_wait_cassa;
 
@@ -74,11 +80,13 @@ typedef struct daily_report {
 
   int daily_refilled_primi;
   int daily_refilled_secondi;
+  int daily_refilled_dolci;
   int daily_refilled_caffe;
 
   // avanzi
   int leftover_primi;
   int leftover_secondi;
+  int leftover_dolci;
   int leftover_caffe;
 
   int daily_user_poverty;

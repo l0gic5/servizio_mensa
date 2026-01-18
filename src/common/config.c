@@ -85,10 +85,16 @@ static void apply_config_parameter(Config *config, const char *key,
   ///////////////////////////////////////////////////
 
   // capacità code
+  else if (strcmp(key, "MENU_FILE_PATH") == 0) {
+    strncpy(config->menu_file_path, value, sizeof(config->menu_file_path) - 1);
+  }
+
   else if (strcmp(key, "NOF_WK_SEATS_PRIMI") == 0) {
     config->queue_capacity_primi = atoi(value);
   } else if (strcmp(key, "NOF_WK_SEATS_SECONDI") == 0) {
     config->queue_capacity_secondi = atoi(value);
+  } else if (strcmp(key, "NOF_WK_SEATS_DOLCI") == 0) {
+    config->queue_capacity_dolci = atoi(value);
   } else if (strcmp(key, "NOF_WK_SEATS_CAFFE") == 0) {
     config->queue_capacity_caffe = atoi(value);
   } else if (strcmp(key, "NOF_WK_SEATS_CASSA") == 0) {
@@ -142,6 +148,8 @@ static void apply_config_parameter(Config *config, const char *key,
     config->price_primi = atof(value);
   } else if (strcmp(key, "PRICE_SECONDI") == 0) {
     config->price_secondi = atof(value);
+  } else if (strcmp(key, "PRICE_DOLCI") == 0) {
+    config->price_dolci = atof(value);
   } else if (strcmp(key, "PRICE_CAFFE") == 0) {
     config->price_caffe = atof(value);
   } else if (strcmp(key, "TICKET_DISCOUNT_PERCENT") == 0) {
@@ -181,6 +189,8 @@ static void apply_config_parameter(Config *config, const char *key,
     config->probability_user_wants_primo = atoi(value);
   } else if (strcmp(key, "PROBABILITY_USER_WANTS_SECONDO") == 0) {
     config->probability_user_wants_secondo = atoi(value);
+  } else if (strcmp(key, "PROBABILITY_USER_WANTS_DOLCE") == 0) {
+    config->probability_user_wants_dolce = atoi(value);
   } else if (strcmp(key, "PROBABILITY_USER_WANTS_CAFFE") == 0) {
     config->probability_user_wants_caffe = atoi(value);
   }
@@ -206,6 +216,16 @@ static void apply_config_parameter(Config *config, const char *key,
   //  7) LOGISTICA (Rifornimenti)  //
   ///////////////////////////////////
 
+  else if (strcmp(key, "DAILY_PRIMI_COUNT") == 0) {
+    config->daily_primi_count = atoi(value);
+  } else if (strcmp(key, "DAILY_SECONDI_COUNT") == 0) {
+    config->daily_secondi_count = atoi(value);
+  } else if (strcmp(key, "DAILY_DOLCI_COUNT") == 0) {
+    config->daily_dolci_count = atoi(value);
+  } else if (strcmp(key, "DAILY_CAFFE_COUNT") == 0) {
+    config->daily_caffe_count = atoi(value);
+  }
+
   else if (strcmp(key, "REFILL_INTERVAL_MINUTES") == 0) {
     config->refill_interval_minutes = atoi(value);
   } else if (strcmp(key, "REFILL_VARIANCE_PERCENT") == 0) {
@@ -218,6 +238,8 @@ static void apply_config_parameter(Config *config, const char *key,
     config->avg_refill_primi = atoi(value);
   } else if (strcmp(key, "AVG_REFILL_SECONDI") == 0) {
     config->avg_refill_secondi = atoi(value);
+  } else if (strcmp(key, "AVG_REFILL_DOLCI") == 0) {
+    config->avg_refill_dolci = atoi(value);
   } else if (strcmp(key, "AVG_REFILL_CAFFE") == 0) {
     config->avg_refill_caffe = atoi(value);
   }
@@ -226,6 +248,8 @@ static void apply_config_parameter(Config *config, const char *key,
     config->max_porzioni_primi = atoi(value);
   } else if (strcmp(key, "MAX_PORZIONI_SECONDI") == 0) {
     config->max_porzioni_secondi = atoi(value);
+  } else if (strcmp(key, "MAX_PORZIONI_DOLCI") == 0) {
+    config->max_porzioni_dolci = atoi(value);
   } else if (strcmp(key, "MAX_PORZIONI_CAFFE") == 0) {
     config->max_porzioni_caffe = atoi(value);
   }
@@ -281,8 +305,12 @@ static void set_default_values(Config *config) {
   config->avg_user_w_ticket = 80;
 
   // 3) STAZIONI
+  strncpy(config->menu_file_path, "data/menu.txt",
+          sizeof(config->menu_file_path) - 1);
+
   config->queue_capacity_primi = 15;
   config->queue_capacity_secondi = 15;
+  config->queue_capacity_dolci = 15;
   config->queue_capacity_caffe = 20;
   config->queue_capacity_cassa = 20;
 
@@ -307,6 +335,7 @@ static void set_default_values(Config *config) {
 
   config->price_primi = 5.5;
   config->price_secondi = 8.2;
+  config->price_dolci = 3.5;
   config->price_caffe = 1.2;
   config->ticket_discount_percent = 25.0;
 
@@ -324,6 +353,7 @@ static void set_default_values(Config *config) {
 
   config->probability_user_wants_primo = 60;
   config->probability_user_wants_secondo = 70;
+  config->probability_user_wants_dolce = 40;
   config->probability_user_wants_caffe = 20;
 
   config->user_budget_min = 10;
@@ -335,16 +365,23 @@ static void set_default_values(Config *config) {
   config->max_users_per_group = 4;
 
   // 7) LOGISTICA
+  config->daily_primi_count = 2;
+  config->daily_secondi_count = 2;
+  config->daily_dolci_count = 4;
+  config->daily_caffe_count = 5;
+
   config->refill_interval_minutes = 10;
   config->refill_variance_percent = 20;
 
   config->avg_refill_time_ns = 50000000;
   config->avg_refill_primi = 20;
   config->avg_refill_secondi = 20;
+  config->avg_refill_dolci = 30;
   config->avg_refill_caffe = 500;
 
   config->max_porzioni_primi = 50;
   config->max_porzioni_secondi = 50;
+  config->max_porzioni_dolci = 75;
   config->max_porzioni_caffe = 1000;
 
   // 8) TOOLS

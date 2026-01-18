@@ -24,6 +24,7 @@
 #include "common/config.h"
 #include "common/ipc_utils.h"
 #include "common/logger.h"
+#include "common/menu.h"
 #include "common/names.h"
 #include "common/stats.h"
 #include "common/types.h"
@@ -135,6 +136,7 @@ void cleanup_resources(void) {
 
   free(log_tag);
   names_destroy();
+  menu_destroy();
 }
 
 /**
@@ -206,6 +208,7 @@ int setup_ipc() {
   // Init Semafori Code Utenti
   init_sem(g_sem_id, SEM_INDEX_SEATS_PRIMI, g_config.queue_capacity_primi);
   init_sem(g_sem_id, SEM_INDEX_SEATS_SECONDI, g_config.queue_capacity_secondi);
+  init_sem(g_sem_id, SEM_INDEX_SEATS_DOLCI, g_config.queue_capacity_dolci);
   init_sem(g_sem_id, SEM_INDEX_SEATS_CAFFE, g_config.queue_capacity_caffe);
   init_sem(g_sem_id, SEM_INDEX_SEATS_CASSA, g_config.queue_capacity_cassa);
   init_sem(g_sem_id, SEM_INDEX_TICKET_READER, g_config.ticket_reader_capacity);
@@ -594,16 +597,14 @@ void handle_final_stats(int days_completed) {
  * Aggiunge porzioni fino al raggiungimento della capacità massima.
  */
 void perform_periodic_refill() {
-  long refill_duration_ns = (long)random_variance(
-      (double)g_config.avg_refill_time_ns, 
-      (double)g_config.refill_variance_percent,
-      rand
-  );
+  long refill_duration_ns =
+      (long)random_variance((double)g_config.avg_refill_time_ns,
+                            (double)g_config.refill_variance_percent, rand);
 
   struct timespec t_refill = {0, refill_duration_ns};
   if (refill_duration_ns >= 1000000000L) {
-      t_refill.tv_sec = refill_duration_ns / 1000000000L;
-      t_refill.tv_nsec = refill_duration_ns % 1000000000L;
+    t_refill.tv_sec = refill_duration_ns / 1000000000L;
+    t_refill.tv_nsec = refill_duration_ns % 1000000000L;
   }
 
   sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
@@ -655,6 +656,27 @@ void perform_periodic_refill() {
     refilled = true;
   }
 
+  // rifornimento DOLCI
+  int current_dolci = g_kitchen->remaining_dolci;
+
+  int to_add_dolci = (int)random_variance(
+      g_config.avg_refill_dolci, g_config.refill_variance_percent, rand);
+  if (to_add_dolci < 0) {
+    to_add_dolci = 0;
+  }
+
+  if (current_dolci < g_config.max_porzioni_dolci) {
+    int new_quantity = current_dolci + to_add_dolci;
+
+    if (new_quantity > g_config.max_porzioni_dolci) {
+      new_quantity = g_config.max_porzioni_dolci;
+    }
+
+    g_kitchen->remaining_dolci = new_quantity;
+    g_stats->total_refilled_dolci += new_quantity - current_dolci;
+    refilled = true;
+  }
+
   // rifornimento CAFFÈ => (max_porzioni_caffe - remaining_caffe) == caffè
   // infinito!
   int current_caffe = g_kitchen->remaining_caffe;
@@ -678,19 +700,18 @@ void perform_periodic_refill() {
   }
 
   if (refilled) {
-    LOG_INFO(log_tag, "Refill periodico (ogni %d min) eseguito in %.2f ms", 
-             g_config.refill_interval_minutes, (double)refill_duration_ns / 1000000.0);
+    LOG_INFO(log_tag, "Refill periodico (ogni %d min) eseguito in %.2f ms",
+             g_config.refill_interval_minutes,
+             (double)refill_duration_ns / 1000000.0);
   }
   // else {
   //   LOG_INFO(log_tag, "Refill non necessario (cucina piena).");
   // }
 
   // LOG_INFO(log_tag,
-  //          "Refill eseguito. Stato cucina:\n  - %d Primi\n  - %d Secondi\n  -
-  //          "
-  //          "%d Caffè",
+  //          "Refill eseguito. Stato cucina:\n  - %d Primi\n  - %d Secondi\n  - %d Dolci\n  - %d Caffè",
   //          g_kitchen->remaining_primi, g_kitchen->remaining_secondi,
-  //          g_kitchen->remaining_caffe);
+  //          g_kitchen->remaining_dolci, g_kitchen->remaining_caffe);
   sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
 }
 
@@ -816,6 +837,61 @@ void handle_day_end_sync() {
 ///////////////////////
 
 /**
+ * @brief Calcola l'offset tra byte e caratteri visibili in una stringa UTF-8.
+ *
+ * Utile per allineamenti di output con caratteri speciali (es: accenti).
+ *
+ * @param s Stringa UTF-8 da analizzare.
+ * @return Numero di byte in più rispetto ai caratteri visibili.
+ */
+static int get_utf8_offset(const char *s) {
+  int len_bytes = 0;
+  int len_chars = 0;
+
+  while (*s) {
+    if ((*s & 0xC0) != 0x80) {
+      len_chars++;
+    }
+    len_bytes++;
+    s++;
+  }
+
+  return len_bytes - len_chars;
+}
+
+/**
+ * @brief Helper per formattare e loggare una categoria di piatti in una riga
+ * sola.
+ */
+static void log_menu_category(const char *tag, const char *label, Dish *dishes,
+                              int count) {
+  if (count == 0) {
+    return;
+  }
+
+  char buffer[1024];
+  int offset = 0;
+  buffer[0] = '\0';
+
+  for (int i = 0; i < count; i++) {
+    size_t remaining = sizeof(buffer) - (size_t)offset;
+
+    int written = snprintf(buffer + offset, remaining, "%s%s",
+                           (i > 0 ? ", " : ""), dishes[i].name);
+
+    if (written < 0 || written >= (int)remaining) {
+      break;
+    }
+    offset += written;
+  }
+
+  int base_width = 8;
+  int real_width = base_width + get_utf8_offset(label);
+
+  LOG_CONF(tag, " - %-*s: %s", real_width, label, buffer);
+}
+
+/**
  * @brief Prepara la cucina e prende uno snapshot delle statistiche.
  *
  * @param day Giorno corrente.
@@ -828,6 +904,7 @@ static void setup_day_start(int day, GlobalStats *start_snapshot) {
   if (day > 1) {
     g_kitchen->remaining_primi = g_config.max_porzioni_primi;
     g_kitchen->remaining_secondi = g_config.max_porzioni_secondi;
+    g_kitchen->remaining_dolci = g_config.max_porzioni_dolci;
     g_kitchen->remaining_caffe = g_config.max_porzioni_caffe;
     LOG_CONF(log_tag, "Cucina rifornita (Day Start).");
 
@@ -839,6 +916,19 @@ static void setup_day_start(int day, GlobalStats *start_snapshot) {
   // SHM sets
   g_worker_config->current_day = day;
   memset(g_groups->arrived_count, 0, sizeof(int) * MAX_GROUPS);
+
+  generate_daily_menu(&g_kitchen->todays_menu, &g_config);
+
+  LOG_CONF(log_tag, "Menu del Giorno %d:", day);
+
+  log_menu_category(log_tag, "Primi", g_kitchen->todays_menu.daily_primi,
+                    g_kitchen->todays_menu.primi_count);
+  log_menu_category(log_tag, "Secondi", g_kitchen->todays_menu.daily_secondi,
+                    g_kitchen->todays_menu.secondi_count);
+  log_menu_category(log_tag, "Dolci", g_kitchen->todays_menu.daily_dolci,
+                    g_kitchen->todays_menu.dolci_count);
+  log_menu_category(log_tag, "Caffè", g_kitchen->todays_menu.daily_caffe,
+                    g_kitchen->todays_menu.caffe_count);
 
   sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
 }
@@ -902,6 +992,8 @@ static void compute_daily_report(DailyReport *report, int day,
       end->total_plates_primi - start->total_plates_primi;
   report->daily_plates_secondi =
       end->total_plates_secondi - start->total_plates_secondi;
+  report->daily_plates_dolci =
+      end->total_plates_dolci - start->total_plates_dolci;
   report->daily_plates_caffe =
       end->total_plates_caffe - start->total_plates_caffe;
 
@@ -914,6 +1006,8 @@ static void compute_daily_report(DailyReport *report, int day,
       (leftovers->remaining_primi > 0) ? leftovers->remaining_primi : 0;
   report->leftover_secondi =
       (leftovers->remaining_secondi > 0) ? leftovers->remaining_secondi : 0;
+  report->leftover_dolci =
+      (leftovers->remaining_dolci > 0) ? leftovers->remaining_dolci : 0;
   report->leftover_caffe =
       (leftovers->remaining_caffe > 0) ? leftovers->remaining_caffe : 0;
 
@@ -922,6 +1016,8 @@ static void compute_daily_report(DailyReport *report, int day,
       end->total_refilled_primi - start->total_refilled_primi;
   report->daily_refilled_secondi =
       end->total_refilled_secondi - start->total_refilled_secondi;
+  report->daily_refilled_dolci =
+      end->total_refilled_dolci - start->total_refilled_dolci;
   report->daily_refilled_caffe =
       end->total_refilled_caffe - start->total_refilled_caffe;
 
@@ -930,6 +1026,8 @@ static void compute_daily_report(DailyReport *report, int day,
       end->total_wait_time_primi - start->total_wait_time_primi;
   report->daily_wait_secondi =
       end->total_wait_time_secondi - start->total_wait_time_secondi;
+  report->daily_wait_dolci =
+      end->total_wait_time_dolci - start->total_wait_time_dolci;
   report->daily_wait_caffe =
       end->total_wait_time_caffe - start->total_wait_time_caffe;
   report->daily_wait_cassa =
@@ -1004,6 +1102,7 @@ void run_simulation_loop(const char *config_path, int *day) {
     sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
     g_stats->total_leftover_primi += report.leftover_primi;
     g_stats->total_leftover_secondi += report.leftover_secondi;
+    g_stats->total_leftover_dolci += report.leftover_dolci;
     g_stats->total_leftover_caffe += report.leftover_caffe;
 
     start_of_day_stats = *g_stats;
@@ -1058,21 +1157,25 @@ int main(int argc, char *argv[]) {
     exit(EXIT_FAILURE);
   }
 
+  if (menu_init(g_config.menu_file_path) == -1) {
+    LOG_WARN(log_tag, "Menu file '%s' non trovato.", g_config.menu_file_path);
+  }
+
   // MUTEX non necessario perché per ora non è memoria competitiva
   // sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
 
   g_kitchen->remaining_primi = g_config.max_porzioni_primi;
   g_kitchen->remaining_secondi = g_config.max_porzioni_secondi;
+  g_kitchen->remaining_dolci = g_config.max_porzioni_dolci;
   g_kitchen->remaining_caffe = g_config.max_porzioni_caffe;
 
   // sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
 
-  LOG_CONF(
-      log_tag,
-      "Rifornimento iniziale completato:\n  - %d Primi\n  - %d Secondi\n  - "
-      "%d Caffè",
-      g_config.max_porzioni_primi, g_config.max_porzioni_secondi,
-      g_config.max_porzioni_caffe);
+  LOG_CONF(log_tag,
+           "Rifornimento iniziale completato:\n  - %d Primi\n  - %d Secondi\n  "
+           "- %d Dolci\n  - %d Caffè",
+           g_config.max_porzioni_primi, g_config.max_porzioni_secondi,
+           g_config.max_porzioni_dolci, g_config.max_porzioni_caffe);
 
   int day_counter = 1;
 

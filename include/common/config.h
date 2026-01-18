@@ -34,9 +34,12 @@ typedef struct config {
   //  3) CONFIGURAZIONE STAZIONI (Code e Banconi)  //
   ///////////////////////////////////////////////////
 
+  char menu_file_path[256]; // MENU_FILE_PATH
+
   // capacità code (utenti in attesa)
   int queue_capacity_primi;   // NOF_WK_SEATS_PRIMI
   int queue_capacity_secondi; // NOF_WK_SEATS_SECONDI
+  int queue_capacity_dolci;   // NOF_WK_SEATS_DOLCI
   int queue_capacity_caffe;   // NOF_WK_SEATS_CAFFE
   int queue_capacity_cassa;   // NOF_WK_SEATS_CASSA
 
@@ -69,6 +72,7 @@ typedef struct config {
   // prezzi
   double price_primi;             // PRICE_PRIMI
   double price_secondi;           // PRICE_SECONDI
+  double price_dolci;             // PRICE_DOLCI
   double price_caffe;             // PRICE_CAFFE
   double ticket_discount_percent; // TICKET_DISCOUNT_PERCENT
 
@@ -94,6 +98,7 @@ typedef struct config {
   // preferenze (%)
   int probability_user_wants_primo;   // PROBABILITY_USER_WANTS_PRIMO
   int probability_user_wants_secondo; // PROBABILITY_USER_WANTS_SECONDO
+  int probability_user_wants_dolce;   // PROBABILITY_USER_WANTS_DOLCE
   int probability_user_wants_caffe;   // PROBABILITY_USER_WANTS_CAFFE
 
   // budget
@@ -109,16 +114,23 @@ typedef struct config {
   //  7) LOGISTICA (Rifornimenti)  //
   ///////////////////////////////////
 
+  int daily_primi_count;   // DAILY_PRIMI_COUNT
+  int daily_secondi_count; // DAILY_SECONDI_COUNT
+  int daily_dolci_count;   // DAILY_DOLCI_COUNT
+  int daily_caffe_count;   // DAILY_CAFFE_COUNT
+
   int refill_interval_minutes; // REFILL_INTERVAL_MINUTES
   int refill_variance_percent; // REFILL_VARIANCE_PERCENT
 
   int avg_refill_time_ns; // AVG_REFILL_TIME_NS
   int avg_refill_primi;   // AVG_REFILL_PRIMI
   int avg_refill_secondi; // AVG_REFILL_SECONDI
+  int avg_refill_dolci;   // AVG_REFILL_DOLCI
   int avg_refill_caffe;   // AVG_REFILL_CAFFE
 
   int max_porzioni_primi;   // MAX_PORZIONI_PRIMI
   int max_porzioni_secondi; // MAX_PORZIONI_SECONDI
+  int max_porzioni_dolci;   // MAX_PORZIONI_DOLCI
   int max_porzioni_caffe;   // MAX_PORZIONI_CAFFE
 
   ////////////////

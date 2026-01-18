@@ -47,15 +47,17 @@
 #define ROLE_NAME(r)                                                           \
   ((r) == 0   ? "PRIMI"                                                        \
    : (r) == 1 ? "SECONDI"                                                      \
-   : (r) == 2 ? "CAFFE"                                                        \
-   : (r) == 3 ? "CASSA"                                                        \
+   : (r) == 2 ? "DOLCI"                                                        \
+   : (r) == 3 ? "CAFFE"                                                        \
+   : (r) == 4 ? "CASSA"                                                        \
               : "IGNOTO")
 
 #define ROLE_NAME_SINGULAR(r)                                                  \
   ((r) == 0   ? "PRIMO"                                                        \
    : (r) == 1 ? "SECONDO"                                                      \
-   : (r) == 2 ? "CAFFE"                                                        \
-   : (r) == 3 ? "CASSA"                                                        \
+   : (r) == 2 ? "DOLCE"                                                        \
+   : (r) == 3 ? "CAFFE"                                                        \
+   : (r) == 4 ? "CASSA"                                                        \
               : "IGNOTO")
 
 #define LOG_INFO(ctx, msg, ...)                                                \

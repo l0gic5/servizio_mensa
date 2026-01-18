@@ -1,10 +1,13 @@
 #include "common/config.h"
 #include "unity.h"
+#include <ctype.h>
 #include <dirent.h>
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
 #define DOUBLE_EPS 0.000001
+
+#define TOTAL_CONFIG_FIELDS 71
 
 #define TEST_CONFIG_FILE "test_simulation.conf"
 
@@ -15,6 +18,34 @@ static Config default_config_snapshot(void) {
 }
 
 static bool double_diff(double a, double b) { return fabs(a - b) > DOUBLE_EPS; }
+
+static int count_keys_in_conf_file(const char *filepath) {
+  FILE *f = fopen(filepath, "r");
+  if (!f) {
+    return -1;
+  }
+
+  int count = 0;
+  char line[256];
+
+  while (fgets(line, sizeof(line), f)) {
+    char *p = line;
+    while (*p && isspace((unsigned char)*p)) {
+      p++;
+    }
+
+    if (*p == '\0' || *p == '#') {
+      continue;
+    }
+
+    if (strchr(p, '=')) {
+      count++;
+    }
+  }
+
+  fclose(f);
+  return count;
+}
 
 static int count_config_differences(const Config *a, const Config *b) {
   int diff = 0;
@@ -72,6 +103,7 @@ static int count_config_differences(const Config *a, const Config *b) {
 
   CMP_DOUBLE(price_primi);
   CMP_DOUBLE(price_secondi);
+  CMP_DOUBLE(price_dolci);
   CMP_DOUBLE(price_caffe);
   CMP_DOUBLE(ticket_discount_percent);
 
@@ -89,6 +121,7 @@ static int count_config_differences(const Config *a, const Config *b) {
 
   CMP_INT(probability_user_wants_primo);
   CMP_INT(probability_user_wants_secondo);
+  CMP_INT(probability_user_wants_dolce);
   CMP_INT(probability_user_wants_caffe);
 
   CMP_INT(user_budget_min);
@@ -96,13 +129,24 @@ static int count_config_differences(const Config *a, const Config *b) {
   CMP_INT(user_min_daily_salary);
   CMP_INT(user_max_daily_salary);
 
+  CMP_INT(max_groups);
+  CMP_INT(max_users_per_group);
+
   // 7) LOGISTICA
+  CMP_INT(daily_primi_count);
+  CMP_INT(daily_secondi_count);
+  CMP_INT(daily_dolci_count);
+  CMP_INT(daily_caffe_count);
+
   CMP_INT(refill_interval_minutes);
   CMP_INT(refill_variance_percent);
+
   CMP_INT(avg_refill_time_ns);
   CMP_INT(avg_refill_primi);
   CMP_INT(avg_refill_secondi);
+  CMP_INT(avg_refill_dolci);
   CMP_INT(avg_refill_caffe);
+
   CMP_INT(max_porzioni_primi);
   CMP_INT(max_porzioni_secondi);
   CMP_INT(max_porzioni_caffe);
@@ -224,6 +268,7 @@ void test_coherence_with_real_default_file(void) {
                                 "variability_cassa");
   TEST_ASSERT_EQUAL_DOUBLE_MESSAGE(5.5, config.price_primi, "price_primi");
   TEST_ASSERT_EQUAL_DOUBLE_MESSAGE(8.2, config.price_secondi, "price_secondi");
+  TEST_ASSERT_EQUAL_DOUBLE_MESSAGE(3.5, config.price_dolci, "price_dolci");
   TEST_ASSERT_EQUAL_DOUBLE_MESSAGE(1.2, config.price_caffe, "price_caffe");
   TEST_ASSERT_EQUAL_DOUBLE_MESSAGE(25.0, config.ticket_discount_percent,
                                    "ticket_discount_percent");
@@ -251,6 +296,8 @@ void test_coherence_with_real_default_file(void) {
                                 "probability_user_wants_primo");
   TEST_ASSERT_EQUAL_INT_MESSAGE(70, config.probability_user_wants_secondo,
                                 "probability_user_wants_secondo");
+  TEST_ASSERT_EQUAL_INT_MESSAGE(40, config.probability_user_wants_dolce,
+                                "probability_user_wants_dolce");
   TEST_ASSERT_EQUAL_INT_MESSAGE(20, config.probability_user_wants_caffe,
                                 "probability_user_wants_caffe");
   TEST_ASSERT_EQUAL_INT_MESSAGE(10, config.user_budget_min, "user_budget_min");
@@ -260,10 +307,20 @@ void test_coherence_with_real_default_file(void) {
   TEST_ASSERT_EQUAL_INT_MESSAGE(15, config.user_max_daily_salary,
                                 "user_max_daily_salary");
 
+  TEST_ASSERT_EQUAL_INT_MESSAGE(30, config.max_groups, "max_groups");
   TEST_ASSERT_EQUAL_INT_MESSAGE(4, config.max_users_per_group,
                                 "max_users_per_group");
 
   // 7) LOGISTICA
+  TEST_ASSERT_EQUAL_INT_MESSAGE(2, config.daily_primi_count,
+                                "daily_primi_count");
+  TEST_ASSERT_EQUAL_INT_MESSAGE(2, config.daily_secondi_count,
+                                "daily_secondi_count");
+  TEST_ASSERT_EQUAL_INT_MESSAGE(4, config.daily_dolci_count,
+                                "daily_dolci_count");
+  TEST_ASSERT_EQUAL_INT_MESSAGE(5, config.daily_caffe_count,
+                                "daily_caffe_count");
+
   TEST_ASSERT_EQUAL_INT_MESSAGE(10, config.refill_interval_minutes,
                                 "refill_interval_minutes");
   TEST_ASSERT_EQUAL_INT_MESSAGE(20, config.refill_variance_percent,
@@ -275,6 +332,8 @@ void test_coherence_with_real_default_file(void) {
                                 "avg_refill_primi");
   TEST_ASSERT_EQUAL_INT_MESSAGE(20, config.avg_refill_secondi,
                                 "avg_refill_secondi");
+  TEST_ASSERT_EQUAL_INT_MESSAGE(30, config.avg_refill_dolci,
+                                "avg_refill_dolci");
   TEST_ASSERT_EQUAL_INT_MESSAGE(500, config.avg_refill_caffe,
                                 "avg_refill_caffe");
 
@@ -282,6 +341,8 @@ void test_coherence_with_real_default_file(void) {
                                 "max_porzioni_primi");
   TEST_ASSERT_EQUAL_INT_MESSAGE(50, config.max_porzioni_secondi,
                                 "max_porzioni_secondi");
+  TEST_ASSERT_EQUAL_INT_MESSAGE(75, config.max_porzioni_dolci,
+                                "max_porzioni_dolci");
   TEST_ASSERT_EQUAL_INT_MESSAGE(1000, config.max_porzioni_caffe,
                                 "max_porzioni_caffe");
 
@@ -339,7 +400,7 @@ void test_all_conf_files_override_at_least_one_field(void) {
 }
 
 void test_full_configuration_override(void) {
-  const int TOTAL_FIELDS = 61;
+  const int TOTAL_FIELDS = TOTAL_CONFIG_FIELDS;
 
   FILE *f = fopen(TEST_CONFIG_FILE, "w");
 
@@ -389,6 +450,7 @@ void test_full_configuration_override(void) {
   // Prezzi
   fprintf(f, "PRICE_PRIMI=99.9\n");
   fprintf(f, "PRICE_SECONDI=99.9\n");
+  fprintf(f, "PRICE_DOLCI=99.9\n");
   fprintf(f, "PRICE_CAFFE=99.9\n");
   fprintf(f, "TICKET_DISCOUNT_PERCENT=99.9\n");
 
@@ -407,6 +469,7 @@ void test_full_configuration_override(void) {
 
   fprintf(f, "PROBABILITY_USER_WANTS_PRIMO=99\n");
   fprintf(f, "PROBABILITY_USER_WANTS_SECONDO=99\n");
+  fprintf(f, "PROBABILITY_USER_WANTS_DOLCE=99\n");
   fprintf(f, "PROBABILITY_USER_WANTS_CAFFE=99\n");
 
   // Budget
@@ -415,15 +478,24 @@ void test_full_configuration_override(void) {
   fprintf(f, "USER_MIN_DAILY_SALARY=999\n");
   fprintf(f, "USER_MAX_DAILY_SALARY=9999\n");
 
-  // LOGISTICA (8)
+  fprintf(f, "MAX_GROUPS=9999\n");
+  fprintf(f, "MAX_USERS_PER_GROUP=9999\n");
+
+  // LOGISTICA (13)
+  fprintf(f, "DAILY_PRIMI_COUNT=9\n");
+  fprintf(f, "DAILY_SECONDI_COUNT=9\n");
+  fprintf(f, "DAILY_DOLCI_COUNT=9\n");
+  fprintf(f, "DAILY_CAFFE_COUNT=9\n");
   fprintf(f, "REFILL_INTERVAL_MINUTES=999\n");
   fprintf(f, "REFILL_VARIANCE_PERCENT=99\n");
   fprintf(f, "AVG_REFILL_TIME_NS=999\n");
   fprintf(f, "AVG_REFILL_PRIMI=999\n");
   fprintf(f, "AVG_REFILL_SECONDI=999\n");
+  fprintf(f, "AVG_REFILL_DOLCI=999\n");
   fprintf(f, "AVG_REFILL_CAFFE=999\n");
   fprintf(f, "MAX_PORZIONI_PRIMI=999\n");
   fprintf(f, "MAX_PORZIONI_SECONDI=999\n");
+  fprintf(f, "MAX_PORZIONI_DOLCI=999\n");
   fprintf(f, "MAX_PORZIONI_CAFFE=999\n");
 
   // TOOLS & SCIOPERO (7)
@@ -456,6 +528,22 @@ void test_full_configuration_override(void) {
            TOTAL_FIELDS, diffs);
 
   TEST_ASSERT_EQUAL_INT_MESSAGE(TOTAL_FIELDS, diffs, error_msg);
+}
+
+void test_consistency_with_default_conf_count(void) {
+  int keys_in_file = count_keys_in_conf_file("conf/default.conf");
+  
+  if (keys_in_file == -1) {
+    TEST_IGNORE_MESSAGE("File conf/default.conf non trovato, salto il controllo conteggio.");
+    return;
+  }
+
+  char msg[128];
+  snprintf(msg, sizeof(msg), 
+           "Il numero di chiavi in default.conf (%d) non coincide con TOTAL_CONFIG_FIELDS (%d)", 
+           keys_in_file, TOTAL_CONFIG_FIELDS);
+           
+  TEST_ASSERT_EQUAL_INT_MESSAGE(TOTAL_CONFIG_FIELDS, keys_in_file, msg);
 }
 
 void test_parse_valid_file(void) {
@@ -659,6 +747,7 @@ int main(void) {
   RUN_TEST(test_coherence_with_real_default_file);
   RUN_TEST(test_all_conf_files_override_at_least_one_field);
   RUN_TEST(test_full_configuration_override);
+  RUN_TEST(test_consistency_with_default_conf_count);
 
   RUN_TEST(test_parse_valid_file);
   RUN_TEST(test_partial_overrides);

@@ -30,9 +30,11 @@ static int g_sem_id = -1;
 static int g_msg_id = -1;
 static int g_shm_stats_id = -1;
 static int g_shm_groups_id = -1;
+static int g_shm_supply_id = -1;
 
 static GlobalStats *g_stats = NULL;
 static GroupState *g_groups = NULL;
+static KitchenState *g_kitchen = NULL;
 
 static volatile sig_atomic_t g_running = 1;
 static volatile sig_atomic_t g_day_ended = 0;
@@ -100,6 +102,9 @@ void update_wait_stats(OpType type, double wait_time) {
   case OP_SECONDI:
     g_stats->total_wait_time_secondi += wait_time;
     break;
+  case OP_DOLCI:
+    g_stats->total_wait_time_dolci += wait_time;
+    break;
   case OP_CAFFE:
     g_stats->total_wait_time_caffe += wait_time;
     break;
@@ -160,6 +165,9 @@ int setup_ipc(void) {
   g_shm_groups_id = allocate_shm(sizeof(GroupState), FTOK_SHM_GROUPS_ID);
   g_groups = (GroupState *)attach_shm(g_shm_groups_id);
 
+  g_shm_supply_id = allocate_shm(sizeof(KitchenState), FTOK_SHM_SUPPLY_ID);
+  g_kitchen = (KitchenState *)attach_shm(g_shm_supply_id);
+
   if (g_sem_id == -1 || g_msg_id == -1 || g_stats == NULL) {
     return -1;
   }
@@ -172,6 +180,12 @@ int setup_ipc(void) {
 void cleanup_resources() {
   if (g_stats) {
     detach_shm(g_stats);
+  }
+  if (g_groups) {
+    detach_shm(g_groups);
+  }
+  if (g_kitchen) {
+    detach_shm(g_kitchen);
   }
 
   free(log_tag);
@@ -237,7 +251,8 @@ int enter_queue(int sem_index, const char *queue_name, int timeout_sec) {
  *
  * @return 0 se servito con successo, -1 in caso di errore.
  */
-int perform_order(OpType type, int msg_type, double amount, bool has_ticket) {
+int perform_order(OpType type, int msg_type, double amount, bool has_ticket,
+                  int item_index, const char *dish_name) {
   if (!g_running) {
     return -1;
   }
@@ -246,16 +261,26 @@ int perform_order(OpType type, int msg_type, double amount, bool has_ticket) {
   req.mtype = msg_type;
   req.sender_pid = getpid();
   req.total_cost = amount;
-
-  req.food_choice[0] = (type == OP_PRIMI);
-  req.food_choice[1] = (type == OP_SECONDI);
-  req.food_choice[2] = (type == OP_CAFFE);
   req.wants_ticket = has_ticket;
+
+  for (int i = 0; i < 4; i++) {
+    req.food_choice[i] = 0;
+  }
+
+  if (type != OP_CASSA && item_index >= 0 && item_index < 4) {
+    req.food_choice[item_index] = 1;
+  }
 
   if (type == OP_CASSA) {
     LOG_INFO(log_tag, "Vado alla Cassa per pagare %.2f€...", amount);
   } else {
-    LOG_INFO(log_tag, "Ordino %s...", ROLE_NAME(type));
+
+    if (dish_name && strlen(dish_name) > 0) {
+      LOG_INFO(log_tag, "Ordino `%s` (%s)...", dish_name, ROLE_NAME_SINGULAR(type));
+    } else {
+      // Fallback al nome generico (es. SECONDO)
+      LOG_INFO(log_tag, "Ordino %s...", ROLE_NAME(type));
+    }
   }
 
   if (send_message(g_msg_id, &req, REQ_PAYLOAD_SIZE, 0) == -1) {
@@ -379,19 +404,19 @@ void wait_for_group(int group_id, int group_size) {
 
   sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
 
-  int sem_idx = SEM_GROUP_BARRIER_BASE + group_id;
+  int sem_index = SEM_GROUP_BARRIER_BASE + group_id;
 
   if (arrived == group_size) {
     LOG_INFO(log_tag, "Sono l'ultimo del gruppo! Andiamo a pagare.");
 
     struct sembuf sb;
-    sb.sem_num = (unsigned short)sem_idx;
+    sb.sem_num = (unsigned short)sem_index;
     sb.sem_op = (short)(group_size - 1);
     sb.sem_flg = 0;
     semop(g_sem_id, &sb, 1);
   } else {
     struct sembuf sb;
-    sb.sem_num = (unsigned short)sem_idx;
+    sb.sem_num = (unsigned short)sem_index;
     sb.sem_op = -1;
     sb.sem_flg = 0;
 
@@ -427,10 +452,12 @@ void user_routine(Config *cfg, double *current_budget, bool has_ticket,
 
   bool wants_primo = false;
   bool wants_secondo = false;
+  bool wants_dolce = false;
   bool wants_caffe = false;
 
   bool got_primo = false;
   bool got_secondo = false;
+  bool got_dolce = false;
 
   if (has_ticket && g_running && !g_day_ended) {
     if (enter_queue(SEM_INDEX_TICKET_READER, "TICKET_READER",
@@ -468,6 +495,14 @@ void user_routine(Config *cfg, double *current_budget, bool has_ticket,
     }
   }
 
+  if (random_probability(cfg->probability_user_wants_dolce, rand)) {
+    if (budget_disponibile >= cfg->price_dolci) {
+      wants_dolce = true;
+      budget_disponibile -= cfg->price_dolci;
+      conto_da_pagare += cfg->price_dolci;
+    }
+  }
+
   // caffè (prenotazione)
   if (random_probability(cfg->probability_user_wants_caffe, rand)) {
     if (budget_disponibile >= cfg->price_caffe) {
@@ -478,7 +513,7 @@ void user_routine(Config *cfg, double *current_budget, bool has_ticket,
   }
 
   // fallback se non ha scelto nulla ma ha budget per caffè
-  if (!wants_primo && !wants_secondo && !wants_caffe &&
+  if (!wants_primo && !wants_secondo && !wants_dolce && !wants_caffe &&
       budget_disponibile >= cfg->price_caffe) {
     wants_caffe = true;
     budget_disponibile -= cfg->price_caffe;
@@ -498,7 +533,15 @@ void user_routine(Config *cfg, double *current_budget, bool has_ticket,
     double start = get_current_time_sec();
     if (enter_queue(SEM_INDEX_SEATS_PRIMI, "PRIMI",
                     cfg->user_queue_timeout_sec) == 0) {
-      int res = perform_order(OP_PRIMI, MSG_TYPE_ORDER_PRIMI, 0.0, has_ticket);
+
+      char dish_name[64] = "Primo Generico";
+      if (g_kitchen->todays_menu.primi_count > 0) {
+        int index = rand() % g_kitchen->todays_menu.primi_count;
+        strncpy(dish_name, g_kitchen->todays_menu.daily_primi[index].name, 63);
+      }
+
+      int res = perform_order(OP_PRIMI, MSG_TYPE_ORDER_PRIMI, 0.0, has_ticket,
+                              MSG_REQ_PRIMO_INDEX, dish_name);
 
       if (res == 0) {
         got_primo = true;
@@ -527,8 +570,15 @@ void user_routine(Config *cfg, double *current_budget, bool has_ticket,
     double start = get_current_time_sec();
     if (enter_queue(SEM_INDEX_SEATS_SECONDI, "SECONDI",
                     cfg->user_queue_timeout_sec) == 0) {
-      int res =
-          perform_order(OP_SECONDI, MSG_TYPE_ORDER_SECONDI, 0.0, has_ticket);
+      char dish_name[64] = "Secondo Generico";
+      if (g_kitchen->todays_menu.secondi_count > 0) {
+        int index = rand() % g_kitchen->todays_menu.secondi_count;
+        strncpy(dish_name, g_kitchen->todays_menu.daily_secondi[index].name,
+                63);
+      }
+
+      int res = perform_order(OP_SECONDI, MSG_TYPE_ORDER_SECONDI, 0.0,
+                              has_ticket, MSG_REQ_SECONDO_INDEX, dish_name);
 
       if (res == 0) {
         got_secondo = true;
@@ -552,7 +602,43 @@ void user_routine(Config *cfg, double *current_budget, bool has_ticket,
     }
   }
 
-  if (!got_primo && !got_secondo && !wants_caffe && !g_day_ended) {
+  if (wants_dolce && g_running && !g_day_ended) {
+    double start = get_current_time_sec();
+    if (enter_queue(SEM_INDEX_SEATS_DOLCI, "DOLCI",
+                    cfg->user_queue_timeout_sec) == 0) {
+      char dish_name[64] = "Dolce Generico";
+      if (g_kitchen->todays_menu.dolci_count > 0) {
+        int index = rand() % g_kitchen->todays_menu.dolci_count;
+        strncpy(dish_name, g_kitchen->todays_menu.daily_dolci[index].name, 63);
+      }
+
+      int res = perform_order(OP_CAFFE, MSG_TYPE_ORDER_CAFFE, 0.0, has_ticket,
+                              MSG_REQ_DOLCE_INDEX, dish_name);
+
+      if (res == 0) {
+        got_dolce = true;
+        update_wait_stats(OP_DOLCI, get_current_time_sec() - start);
+      } else if (res == -2) {
+        *current_budget += cfg->price_dolci;
+        conto_da_pagare -= cfg->price_dolci;
+
+        // fallback caffè
+        if (!wants_caffe && *current_budget >= cfg->price_caffe) {
+          LOG_INFO(log_tag, "Dolce finito. Ripiego su CAFFE.");
+          wants_caffe = true;
+          *current_budget -= cfg->price_caffe;
+          conto_da_pagare += cfg->price_caffe;
+        }
+      }
+      sem_signal(g_sem_id, SEM_INDEX_SEATS_DOLCI);
+    } else {
+      *current_budget += cfg->price_dolci;
+      conto_da_pagare -= cfg->price_dolci;
+    }
+  }
+
+  if (!got_primo && !got_secondo && !got_dolce && !wants_caffe &&
+      !g_day_ended) {
     mark_as_refused();
     LOG_INFO(log_tag, "Oggi non mangio niente. Esco.");
     return;
@@ -585,7 +671,7 @@ void user_routine(Config *cfg, double *current_budget, bool has_ticket,
                     cfg->user_queue_timeout_sec) == 0) {
 
       if (perform_order(OP_CASSA, MSG_TYPE_PAYMENT, importo_effettivo,
-                        has_ticket) != -1) {
+                        has_ticket, -1, "") != -1) {
         // Addebito effettivo
         *current_budget -= importo_effettivo;
 
@@ -614,7 +700,7 @@ void user_routine(Config *cfg, double *current_budget, bool has_ticket,
 
   // 4) CONSUMO PASTO (Tavolo)
 
-  if ((got_primo || got_secondo) && g_running && !g_day_ended) {
+  if ((got_primo || got_secondo || got_dolce) && g_running && !g_day_ended) {
     consume_main_meal(cfg, true);
   }
 
@@ -625,7 +711,14 @@ void user_routine(Config *cfg, double *current_budget, bool has_ticket,
 
     if (enter_queue(SEM_INDEX_SEATS_CAFFE, "CAFFE",
                     cfg->user_queue_timeout_sec) == 0) {
-      int res = perform_order(OP_CAFFE, MSG_TYPE_ORDER_CAFFE, 0.0, has_ticket);
+      char dish_name[64] = "Caffè Generico";
+      if (g_kitchen->todays_menu.caffe_count > 0) {
+        int index = rand() % g_kitchen->todays_menu.caffe_count;
+        strncpy(dish_name, g_kitchen->todays_menu.daily_caffe[index].name, 63);
+      }
+
+      int res = perform_order(OP_CAFFE, MSG_TYPE_ORDER_CAFFE, 0.0, has_ticket,
+                              MSG_REQ_CAFFE_INDEX, dish_name);
 
       if (res == 0) {
         update_wait_stats(OP_CAFFE, get_current_time_sec() - start);
