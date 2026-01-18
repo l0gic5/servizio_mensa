@@ -49,9 +49,9 @@ graph LR
   Check -->|Sì - Timeout/Overload| Clean["Cleanup Risorse<br>(Kill & IPC Remove)"]
   Clean --> Stop((End))
 
-  style Start fill:#f9f,stroke:#333,stroke-width:2px
-  style Stop fill:#f9f,stroke:#333,stroke-width:2px
-  style Algo fill:#e1f5fe,stroke:#01579b
+  style Start fill:#f9f,stroke:#333,stroke-width:2px,color:#000
+  style Stop fill:#f9f,stroke:#333,stroke-width:2px,color:#000
+  style Algo fill:#e1f5fe,stroke:#01579b,color:#000
 ```
 
 ### 2.1) Modello dei Processi
@@ -81,9 +81,9 @@ graph LR
   Check -- Sì --> Clean["Cleanup & Exit"]
   Clean --> Stop((End))
 
-  style Init fill:#e1f5fe,stroke:#01579b
-  style Fork fill:#fff9c4,stroke:#fbc02d
-  style Algo fill:#e8f5e9,stroke:#2e7d32
+  style Init fill:#e1f5fe,stroke:#01579b,color:#000
+  style Fork fill:#fff9c4,stroke:#fbc02d,color:#000
+  style Algo fill:#e8f5e9,stroke:#2e7d32,color:#000
 ```
 
 2. **Processi Worker (`operatore` e `cassa`)**:
@@ -118,9 +118,9 @@ graph LR
   
   SemSignal --> LoopWait
 
-  style Boot fill:#f3e5f5,stroke:#7b1fa2
-  style SetRoleO fill:#e1f5fe,stroke:#0277bd
-  style SemWait fill:#ffccbc,stroke:#d84315
+  style Boot fill:#f3e5f5,stroke:#7b1fa2,color:#000
+  style SetRoleO fill:#e1f5fe,stroke:#0277bd,color:#000
+  style SemWait fill:#ffccbc,stroke:#d84315,color:#000
 ```
 
 1. **Processi Client (`utente`)**:
@@ -403,8 +403,8 @@ graph LR
   Clean --> End((End))
   Error --> End
   
-  style Check fill:#fff9c4,stroke:#fbc02d
-  style WaitSig fill:#e1f5fe,stroke:#01579b
+  style Check fill:#fff9c4,stroke:#fbc02d,color:#000
+  style WaitSig fill:#e1f5fe,stroke:#01579b,color:#000
 ```
 
 ### 5.3) Data Export & Reporting
@@ -434,9 +434,9 @@ graph LR
   
   UpdateGlobal --> FinalReport["Report Finale (Aggregato)<br>a fine simulazione"]
 
-  style CheckExport fill:#ffccbc,stroke:#d84315
-  style CheckSingle fill:#ffccbc,stroke:#d84315
-  style WriteSingle fill:#c8e6c9,stroke:#2e7d32
+  style CheckExport fill:#ffccbc,stroke:#d84315,color:#000
+  style CheckSingle fill:#ffccbc,stroke:#d84315,color:#000
+  style WriteSingle fill:#c8e6c9,stroke:#2e7d32,color:#000
 ```
 
 ---
