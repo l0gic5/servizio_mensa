@@ -34,6 +34,7 @@
 #define SEM_INDEX_DAY_CHANGE 14
 
 #define MAX_GROUPS 100
+#define MAX_TOTAL_USERS 500
 #define SEM_GROUP_BARRIER_BASE 15
 
 #define TOTAL_SEMS (15 + MAX_GROUPS)
@@ -60,6 +61,10 @@ typedef struct worker_config {
 typedef struct group_state {
   // n° di utenti del gruppo [i] arrivati alla barriera
   int arrived_count[MAX_GROUPS];
+
+  int user_to_group_map[MAX_TOTAL_USERS];
+  
+  int group_sizes[MAX_GROUPS];
 } GroupState;
 
 ///////////////////

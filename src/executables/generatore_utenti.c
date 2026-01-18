@@ -32,20 +32,22 @@ void int_handler(int sig) {
   keep_running = 0;
 }
 
-pid_t spawn_user(const char *config_path, Config *cfg) {
+pid_t spawn_user(const char *config_path, Config *cfg, int user_id) {
   pid_t pid = fork();
+
   if (pid == -1) {
     perror("fork");
     return -1;
   }
+
   if (pid == 0) {
     char *ticket_arg = (rand() % 100 < cfg->avg_user_w_ticket) ? "1" : "0";
 
-    char *group_id_arg = "0";
-    char *group_size_arg = "1";
+    char id_arg[16];
+    sprintf(id_arg, "%d", user_id);
 
     char *args[] = {(char *)PATH_UTENTE, (char *)config_path, ticket_arg,
-                    group_id_arg,        group_size_arg,      NULL};
+                    id_arg, NULL};
 
     execve(PATH_UTENTE, args, NULL);
     perror("execve");
@@ -101,6 +103,29 @@ int main(int argc, char *argv[]) {
     }
   }
 
+  int base_users = config.nof_users;
+  int max_spawnable = MAX_TOTAL_USERS - base_users;
+
+  if (max_spawnable <= 0) {
+    printf(
+        COLOR_RED
+        "\n[ERRORE] Il sistema è già PIENO (%d/%d utenti base).\n" COLOR_RESET,
+        base_users, MAX_TOTAL_USERS);
+    printf(
+        "Impossibile spawnare utenti extra senza causare buffer overflow.\n");
+    detach_shm(worker_config);
+    return EXIT_FAILURE;
+  }
+
+  if (num_users_to_spawn > max_spawnable) {
+    printf(COLOR_YELLOW "\n[WARNING] Richiesti %d utenti, ma lo spazio rimasto "
+                        "è %d.\n" COLOR_RESET,
+           num_users_to_spawn, max_spawnable);
+    printf("Ridimensiono la richiesta a: %d\n", max_spawnable);
+    num_users_to_spawn = max_spawnable;
+    sleep(2);
+  }
+
   int start_day = worker_config->current_day;
   printf(" ➯ Giorno Attuale rilevato: %d\n", start_day);
   printf(" ➯ Gli utenti vivranno finché non inizia il Giorno %d.\n",
@@ -119,10 +144,15 @@ int main(int argc, char *argv[]) {
     return EXIT_FAILURE;
   }
 
+  int base_users_count = config.nof_users;
+
   for (int i = 0; i < num_users_to_spawn; i++) {
-    pids[i] = spawn_user(config_path, &config);
+    int unique_id = base_users_count + i;
+
+    pids[i] = spawn_user(config_path, &config, unique_id);
+
     if (pids[i] > 0) {
-      printf(" ➤ Spawn di PID: %d\n", pids[i]);
+      printf(" ➤ Spawn di PID: %d (ID Logico: %d)\n", pids[i], unique_id);
       usleep(20000); // 20ms delay
     }
   }

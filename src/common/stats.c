@@ -314,7 +314,8 @@ char *process_daily_report(DailyReport *report, GlobalStats *total_stats) {
 
   int len = asprintf(
       &buffer,
-      "\n" COLOR_BLUE "========== REPORT GIORNO %d ==========" COLOR_RESET "\n"
+      "\n" COLOR_BLUE "════════════ REPORT GIORNO %d ═══════════" COLOR_RESET
+      "\n"
       "Utenti Serviti:   %d\n"
       "  * con ticket: (%d/%d)\n"
       "Utenti Respinti:  %d\n"
@@ -328,16 +329,16 @@ char *process_daily_report(DailyReport *report, GlobalStats *total_stats) {
       "  - Caffè:   %4d  (Avanzi: %4d  |  Refill: %4d)\n"
       "Ricavo Giornata:  %.2f€\n"
       "Utenti poveri:   %d\n" COLOR_CYAN
-      "=========== Totali ad Oggi ===========\n" COLOR_RESET
+      "═════════════ Totali ad Oggi ════════════\n" COLOR_RESET
       "Totale Serviti:   %d\n"
       "Totale Ricavi:    %.2f€\n" COLOR_CYAN
-      "======= Tempi Medi Attesa (s) ========\n" COLOR_RESET
+      "═════════ Tempi Medi Attesa (s) ═════════\n" COLOR_RESET
       "  - Primi:   %.5f s\n"
       "  - Secondi: %.5f s\n"
       "  - Dolci:   %.5f s\n"
       "  - Caffè:   %.5f s\n"
       "  - Cassa:   %.5f s\n" COLOR_BLUE
-      "======================================" COLOR_RESET "\n\n",
+      "═════════════════════════════════════════" COLOR_RESET "\n\n",
       report->day_number, report->daily_users_served,
       report->daily_users_w_ticket, report->daily_users_served,
       report->daily_users_refused, report->daily_groups_created, avg_group_wait,
@@ -401,7 +402,8 @@ char *process_final_report(GlobalStats *stats, int total_days) {
 
   int len = asprintf(
       &buffer,
-      "\n" COLOR_BLUE "======== REPORT FINALE =========" COLOR_RESET "\n"
+      "\n" COLOR_BLUE 
+      "════════════ REPORT FINALE ════════════" COLOR_RESET "\n"
       "Giorni Completati: %d\n"
       "Utenti Serviti in totale: %d\n"
       "  * con ticket: (%d/%d)\n"
@@ -425,15 +427,15 @@ char *process_final_report(GlobalStats *stats, int total_days) {
       "  - Secondi: %.2f\n"
       "  - Dolci: %.2f\n"
       "  - Caffè: %.2f\n" COLOR_CYAN
-      "======= Totali Accumulati =======\n" COLOR_RESET
+      "═════════ Totali Accumulati ═════════\n" COLOR_RESET
       "Transazioni Totali: %d\n"
       "Ricavo Totale: %.2f€\n" COLOR_CYAN
-      "===== Tempi Medi Attesa (s) =====\n" COLOR_RESET "  - Primi:   %.5f s\n"
+      "═══════ Tempi Medi Attesa (s) ═══════\n" COLOR_RESET "  - Primi:   %.5f s\n"
       "  - Secondi: %.5f s\n"
       "  - Dolci:   %.5f s\n"
       "  - Caffè:   %.5f s\n"
       "  - Cassa:   %.5f s\n" COLOR_BLUE
-      "================================" COLOR_RESET "\n\n",
+      "═══════════════════════════════════════" COLOR_RESET "\n\n",
       total_days, stats->total_users_served, stats->total_users_w_ticket,
       stats->total_users_served, stats->total_users_refused, avg_user_poverty,
       avg_groups_per_day, avg_group_wait_global, stats->total_plates_primi,

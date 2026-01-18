@@ -308,16 +308,16 @@ void compute_initial_workers_distribution(int available_workers, int t_primi,
 /**
  * @brief Assegna in sicurezza un ruolo a un range di indici.
  * @param array L'array da riempire
- * @param current_idx Puntatore all'indice corrente (viene aggiornato)
+ * @param current_index Puntatore all'indice corrente (viene aggiornato)
  * @param count Quanti ne vuoi aggiungere
  * @param role Il ruolo da assegnare
  * @param max_size Dimensione massima dell'array
  */
-static void safe_assign_roles(int *array, int *current_idx, int count, int role,
-                              int max_size) {
+static void safe_assign_roles(int *array, int *current_index, int count,
+                              int role, int max_size) {
   for (int i = 0; i < count; i++) {
-    if (*current_idx < max_size) {
-      array[(*current_idx)++] = role;
+    if (*current_index < max_size) {
+      array[(*current_index)++] = role;
     } else {
       break;
     }
@@ -560,59 +560,93 @@ void start_all_processes(const char *config_path) {
   spawn_worker_group(OP_CAFFE, w_caffe, PATH_OPERATORE, config_path,
                      &current_worker_id, &pid_index);
 
-  int users_spawned = 0;
-  int current_group_id = 0;
-
   // gestione gruppi utenti
-  while (users_spawned < g_config.nof_users) {
-    // estrae dimensione casuale gruppo [1 .. MAX]
-    int group_size = (rand() % g_config.max_users_per_group) + 1;
+  LOG_CONF(log_tag, "Avvio %d processi Utente...", g_config.nof_users);
 
-    if (users_spawned + group_size > g_config.nof_users) {
-      group_size = g_config.nof_users - users_spawned;
+  for (int i = 0; i < g_config.nof_users; i++) {
+    int has_ticket = random_probability(g_config.avg_user_w_ticket, rand);
+
+    char ticket_buf[32];
+    sprintf(ticket_buf, "%d", has_ticket);
+
+    char id_buf[32];
+    sprintf(id_buf, "%d", i);
+
+    char *arg_ticket = strdup(ticket_buf);
+    char *arg_id = strdup(id_buf);
+
+    char *args_utente[] = {(char *)PATH_UTENTE, (char *)config_path, arg_ticket,
+                           arg_id, NULL};
+
+    g_child_pids[pid_index++] = spawn_process(PATH_UTENTE, args_utente);
+
+    free(arg_ticket);
+    free(arg_id);
+
+    if (i % 10 == 0) {
+      usleep(1000);
     }
-
-    sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
-    g_stats->total_groups_created++;
-    sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
-
-    LOG_INFO(log_tag, "Creazione Gruppo ID %d con %d utenti.", current_group_id,
-             group_size);
-
-    for (int k = 0; k < group_size; k++) {
-      int has_ticket = random_probability(g_config.avg_user_w_ticket, rand);
-
-      char ticket_arg[2];
-      sprintf(ticket_arg, "%d", has_ticket);
-
-      // GroupID e GroupSize => argomenti
-      char group_id_arg[16];
-      sprintf(group_id_arg, "%d", current_group_id);
-
-      char group_size_arg[16];
-      sprintf(group_size_arg, "%d", group_size);
-
-      char *args_utente[] = {(char *)PATH_UTENTE, (char *)config_path,
-                             ticket_arg,          group_id_arg,
-                             group_size_arg,      NULL};
-
-      g_child_pids[pid_index++] = spawn_process(PATH_UTENTE, args_utente);
-      users_spawned++;
-    }
-
-    current_group_id++;
   }
 
   sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
   g_worker_config->total_workers_count = g_config.nof_workers;
   g_worker_config->active_primi = w_primi;
-
-  g_daily_group_count = g_stats->total_groups_created;
   sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
 
   sleep((unsigned int)g_config.system_startup_delay_sec);
 
   LOG_INFO(log_tag, "Processi avviati: %d", pid_index);
+}
+
+/**
+ * @brief Mescola gli utenti e crea nuovi gruppi casuali per la giornata.
+ *
+ * @param total_users Numero totale di utenti da distribuire nei gruppi.
+ */
+void shuffle_daily_groups(int total_users) {
+  for (int i = 0; i < MAX_GROUPS; i++) {
+    g_groups->group_sizes[i] = 0;
+    g_groups->arrived_count[i] = 0;
+  }
+
+  int *user_ids = malloc(sizeof(int) * (long unsigned int)total_users);
+  for (int i = 0; i < total_users; i++) {
+    user_ids[i] = i;
+  }
+
+  for (int i = total_users - 1; i > 0; i--) {
+    int j = rand() % (i + 1);
+    int temp = user_ids[i];
+    user_ids[i] = user_ids[j];
+    user_ids[j] = temp;
+  }
+
+  int current_user_index = 0;
+  int group_id = 0;
+
+  while (current_user_index < total_users) {
+    int size = (rand() % g_config.max_users_per_group) + 1;
+
+    if (current_user_index + size > total_users) {
+      size = total_users - current_user_index;
+    }
+
+    g_groups->group_sizes[group_id] = size;
+
+    for (int k = 0; k < size; k++) {
+      int user_id = user_ids[current_user_index++];
+      g_groups->user_to_group_map[user_id] = group_id;
+    }
+
+    group_id++;
+  }
+
+  free(user_ids);
+
+  g_daily_group_count = group_id;
+
+  LOG_CONF(log_tag, "Creati %d gruppi per oggi.",
+           group_id);
 }
 
 /**
@@ -961,6 +995,8 @@ static void setup_day_start(int day, GlobalStats *start_snapshot) {
 
     g_stats->total_groups_created += g_daily_group_count;
   }
+
+  shuffle_daily_groups(g_config.nof_users);
 
   *start_snapshot = *g_stats;
 

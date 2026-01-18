@@ -276,7 +276,8 @@ int perform_order(OpType type, int msg_type, double amount, bool has_ticket,
   } else {
 
     if (dish_name && strlen(dish_name) > 0) {
-      LOG_INFO(log_tag, "Ordino `%s` (%s)...", dish_name, ROLE_NAME_SINGULAR(type));
+      LOG_INFO(log_tag, "Ordino `%s` (%s)...", dish_name,
+               ROLE_NAME_SINGULAR(type));
     } else {
       // Fallback al nome generico (es. SECONDO)
       LOG_INFO(log_tag, "Ordino %s...", ROLE_NAME(type));
@@ -750,9 +751,8 @@ int main(int argc, char *argv[]) {
 
   srand((unsigned int)time(NULL) ^ (unsigned int)getpid());
 
-  if (argc < 5) {
-    fprintf(stderr,
-            "Usage: %s <config_path> <has_ticket> <group_id> <group_size>\n",
+  if (argc < 4) {
+    fprintf(stderr, "Usage: %s <config_path> <has_ticket> <user_id>\n",
             argv[0]);
     exit(EXIT_FAILURE);
   }
@@ -766,17 +766,7 @@ int main(int argc, char *argv[]) {
                         ? true
                         : (bool)temp_val;
 
-  int group_id = (int)strtol(argv[3], &endptr, 10);
-  if (endptr == argv[3] || *endptr != '\0') {
-    fprintf(stderr, "Invalid group_id: %s\n", argv[3]);
-    exit(EXIT_FAILURE);
-  }
-
-  int group_size = (int)strtol(argv[4], &endptr, 10);
-  if (endptr == argv[4] || *endptr != '\0') {
-    fprintf(stderr, "Invalid group_size: %s\n", argv[4]);
-    exit(EXIT_FAILURE);
-  }
+  int user_id = (int)strtol(argv[3], &endptr, 10);
 
   names_init();
   log_tag = get_random_identity(ROLE_UTENTE);
@@ -800,6 +790,18 @@ int main(int argc, char *argv[]) {
        day++) {
 
     wait_for_day_start();
+
+    int group_id = 0;
+    int group_size = 1;
+
+    if (user_id < config.nof_users) {
+      group_id = g_groups->user_to_group_map[user_id];
+      group_size = g_groups->group_sizes[group_id];
+    } else {
+      // tool esterno
+      group_id = 0;
+      group_size = 1;
+    }
 
     // reset giornaliero: flag alzato dal SIGUSR1 (fine giornata)
     // senza questo => non fa più pause() e segnala la barriera anche quando il
