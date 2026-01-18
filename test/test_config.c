@@ -7,7 +7,7 @@
 #include <string.h>
 #define DOUBLE_EPS 0.000001
 
-#define TOTAL_CONFIG_FIELDS 71
+#define TOTAL_CONFIG_FIELDS 72
 
 #define TEST_CONFIG_FILE "test_simulation.conf"
 
@@ -77,6 +77,8 @@ static int count_config_differences(const Config *a, const Config *b) {
   CMP_INT(avg_user_w_ticket);
 
   // 3) STAZIONI
+  CMP_STR(menu_file_path);
+
   CMP_INT(queue_capacity_primi);
   CMP_INT(queue_capacity_secondi);
   CMP_INT(queue_capacity_caffe);
@@ -228,6 +230,9 @@ void test_coherence_with_real_default_file(void) {
                                 "avg_user_w_ticket");
 
   // 3) STAZIONI (Capacità e Postazioni)
+  TEST_ASSERT_EQUAL_STRING_MESSAGE("data/menu.txt", config.menu_file_path,
+                                   "menu_file_path");
+
   TEST_ASSERT_EQUAL_INT_MESSAGE(15, config.queue_capacity_primi,
                                 "queue_capacity_primi");
   TEST_ASSERT_EQUAL_INT_MESSAGE(15, config.queue_capacity_secondi,
@@ -421,6 +426,8 @@ void test_full_configuration_override(void) {
   fprintf(f, "AVG_USER_W_TICKET=99\n");
 
   // STAZIONI (10)
+  fprintf(f, "MENU_FILE_PATH=override_menu.txt\n");
+
   fprintf(f, "NOF_WK_SEATS_PRIMI=999\n");
   fprintf(f, "NOF_WK_SEATS_SECONDI=999\n");
   fprintf(f, "NOF_WK_SEATS_CAFFE=999\n");
@@ -532,17 +539,19 @@ void test_full_configuration_override(void) {
 
 void test_consistency_with_default_conf_count(void) {
   int keys_in_file = count_keys_in_conf_file("conf/default.conf");
-  
+
   if (keys_in_file == -1) {
-    TEST_IGNORE_MESSAGE("File conf/default.conf non trovato, salto il controllo conteggio.");
+    TEST_IGNORE_MESSAGE(
+        "File conf/default.conf non trovato, salto il controllo conteggio.");
     return;
   }
 
   char msg[128];
-  snprintf(msg, sizeof(msg), 
-           "Il numero di chiavi in default.conf (%d) non coincide con TOTAL_CONFIG_FIELDS (%d)", 
+  snprintf(msg, sizeof(msg),
+           "Il numero di chiavi in default.conf (%d) non coincide con "
+           "TOTAL_CONFIG_FIELDS (%d)",
            keys_in_file, TOTAL_CONFIG_FIELDS);
-           
+
   TEST_ASSERT_EQUAL_INT_MESSAGE(TOTAL_CONFIG_FIELDS, keys_in_file, msg);
 }
 
