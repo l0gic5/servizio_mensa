@@ -1,7 +1,7 @@
 ---
 title: "Relazione Tecnica: Progetto Oasi del Golfo"
 author: "André Marguerettaz"
-date: "2026-01-18"
+date: "2026-01-17"
 fontsize: 10pt
 papersize: a4
 geometry: "margin=2.5cm"
