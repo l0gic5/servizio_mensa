@@ -21,9 +21,9 @@ header-includes: |
 
 # Relazione Tecnica: Progetto "Oasi del Golfo"
 
-**Corso:** Sistemi Operativi 2025/2026
-**Autore:** André Marguerettaz
-**Matricola:** 1152060
+**Corso:** Sistemi Operativi 2025/2026\
+**Autore:** André Marguerettaz\
+**Matricola:** 1152060\
 **Repository GitHub:** [https://github.com/l0gic5/servizio_mensa](https://github.com/l0gic5/servizio_mensa)
 
 ---
