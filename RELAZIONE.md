@@ -31,6 +31,29 @@ Il sistema è progettato per essere **adattivo**: monitora le performance giorna
 
 L'applicazione è sviluppata in linguaggio C (standard C99) per ambiente Linux, seguendo rigorosamente la filosofia Unix: ogni entità attiva nella simulazione corrisponde a un processo indipendente del sistema operativo.
 
+```mermaid
+graph LR
+  Start((Start)) --> Init["Parsing Config &<br>Inizializzazione IPC"]
+  Init --> Fork["Fork Processi Figli<br>(Workers & Utenti)"]
+  Fork --> WaitStart
+  
+  subgraph "Loop di Simulazione (Giornaliero)"
+    WaitStart["Attesa Barriera<br>Inizio Giorno"] --> Run["Esecuzione Servizio<br>(Comande, Scambi, Consumo)"]
+    Run --> WaitEnd["Attesa Barriera<br>Fine Giornata"]
+    WaitEnd --> Calc["Calcolo Statistiche<br>& Export CSV"]
+    Calc --> Algo["Algoritmo Adattivo:<br>Ricalcolo Ruoli Worker"]
+    Algo --> Check{"Terminazione?"}
+  end
+  
+  Check -->|No - Giorno Successivo| WaitStart
+  Check -->|Sì - Timeout/Overload| Clean["Cleanup Risorse<br>(Kill & IPC Remove)"]
+  Clean --> Stop((End))
+
+  style Start fill:#f9f,stroke:#333,stroke-width:2px
+  style Stop fill:#f9f,stroke:#333,stroke-width:2px
+  style Algo fill:#e1f5fe,stroke:#01579b
+```
+
 ### 2.1) Modello dei Processi
 
 Il ciclo di vita della simulazione è orchestrato gerarchicamente:
@@ -41,14 +64,97 @@ Il ciclo di vita della simulazione è orchestrato gerarchicamente:
      * Effettua il *fork* ed *execve* di tutti i processi figli.
      * Gestisce il clock della simulazione e la sincronizzazione di fine giornata (Barrier).
      * Esegue l'algoritmo di riallocazione dei ruoli (descritto nella Sez. 4).
+
+```mermaid
+graph LR
+  Start((Start)) --> Init["Inizializzazione Risorse IPC<br>(System V)"]
+  Init --> Fork["Spawn Processi Figli<br>(fork + execve)"]
+  
+  subgraph "Orchestratore (Ciclo Giornaliero)"
+    Clock["Gestione Clock Simulazione"] --> Barrier["Sincronizzazione Fine Giornata<br>(Barrier)"]
+    Barrier --> Algo["Algoritmo Adattivo:<br>Riallocazione Ruoli"]
+  end
+  
+  Fork --> Clock
+  Algo --> Check{"Fine Simulazione?"}
+  Check -- No --> Clock
+  Check -- Sì --> Clean["Cleanup & Exit"]
+  Clean --> Stop((End))
+
+  style Init fill:#e1f5fe,stroke:#01579b
+  style Fork fill:#fff9c4,stroke:#fbc02d
+  style Algo fill:#e8f5e9,stroke:#2e7d32
+```
+
 2. **Processi Worker (`operatore` e `cassa`)**:
       * Simulano il personale della mensa.
       * Sono generici all'avvio: il loro ruolo (Primi, Secondi, Caffè) è determinato dinamicamente leggendo la *Shared Memory*.
       * Competono per l'acquisizione delle risorse "Postazione" tramite semafori.
-3. **Processi Client (`utente`)**:
+
+```mermaid
+graph LR
+  StartOperatore((Start Operatore)) --> Boot["Avvio: Worker Generico"]
+  
+  subgraph "Configurazione Dinamica"
+    Boot --> ReadSHM["Lettura Shared Memory"]
+    ReadSHM --> SetRoleO["Determinazione Ruolo<br>(Primi / Secondi / Caffè)"]
+  end
+
+  SetRoleO --> LoopWait["Attesa Richiesta"]
+
+  StartCassa((Start Cassa)) --> BootC["Avvio: Worker Cassa"]
+
+  subgraph "Configurazione Dinamica"
+    BootC --> ReadSHMC["Lettura Shared Memory"]
+  end
+  
+  ReadSHMC --> LoopWait["Attesa Richiesta"]
+  
+  subgraph "Gestione Risorse (Mutua Esclusione)"
+    LoopWait --> SemWait["Competizione Risorsa<br>(Semaforo Postazione)"]
+    SemWait -- Acquisita --> Work["Esecuzione Servizio"]
+    Work --> SemSignal["Rilascio Risorsa<br>(Semaforo Postazione)"]
+  end
+  
+  SemSignal --> LoopWait
+
+  style Boot fill:#f3e5f5,stroke:#7b1fa2
+  style SetRoleO fill:#e1f5fe,stroke:#0277bd
+  style SemWait fill:#ffccbc,stroke:#d84315
+```
+
+1. **Processi Client (`utente`)**:
       * Simulano il comportamento dei clienti.
       * Implementano una macchina a stati finiti: *Scelta Menu -> Coda -> Ordine -> Attesa Gruppo -> Pagamento -> Consumo*.
       * Gestiscono autonomamente i timeout (impazienza) e la rinuncia al servizio in caso di congestione.
+
+```mermaid
+stateDiagram-v2
+  direction LR
+  [*] --> CheckTicket: Entro
+  CheckTicket --> SceltaMenu: Ticket/No Ticket
+  
+  state "Acquisizione Coda" as Coda {
+    SceltaMenu --> TentativoCoda
+    TentativoCoda --> InCoda: Posto Libero
+    TentativoCoda --> Abbandono: Timeout (EAGAIN)
+  }
+
+  InCoda --> PrelievoCibo: Operatore Libero
+  PrelievoCibo --> AttesaGruppo: Cibo Preso
+  
+  state "Sincronizzazione" as Sync {
+    AttesaGruppo --> Cassa: Ultimo membro/Utente individuale
+    AttesaGruppo --> Wait: (Counter < N)
+    Wait --> AttesaGruppo
+  }
+
+  Cassa --> Consumo: Pagamento OK
+  Cassa --> AbbandonoOrdine: Pagamento NON OK
+  AbbandonoOrdine --> [*]
+  Consumo --> [*]: Uscita
+  Abbandono --> [*]: Terminazione Anticipata
+```
 
 ### 2.2) Gestione delle Risorse IPC
 
@@ -165,6 +271,23 @@ $$Workers_i = \left\lfloor N_{workers} \cdot \frac{S_i}{ \sum{S_k} } \right\rflo
 
 I resti della divisione vengono assegnati iterativamente alle stazioni con il residuo maggiore (approccio *Greedy*) per garantire che $\sum{Workers_i} = N_{workers}$.
 
+```mermaid
+graph LR
+  subgraph Giorno T
+    STATS["Raccolta Statistiche<br>(Wait Times)"] --> CALC[Calcolo Stress Score]
+  end
+  
+  CALC --> EMA["Formula EMA:<br>S_t = α * W + (1 - α) * S_t-1"]
+  EMA --> ALLOC["Riallocazione Worker<br>(Algoritmo Greedy)"]
+  
+  subgraph "Giorno T+1"
+    ALLOC --> SETUP[Setup Nuova Configurazione]
+    SETUP --> SIM[Esecuzione Simulazione]
+  end
+  
+  SIM --> STATS
+```
+
 ### 4.2) Gestione dei Gruppi (Pattern Barriera Custom)
 
 La specifica richiede che gli utenti appartenenti allo stesso gruppo attendano il completamento della raccolta cibo di tutti i membri prima di procedere alla cassa.
@@ -174,6 +297,33 @@ Questa logica è implementata tramite una **Barriera di Sincronizzazione Locale*
 2. Quando un utente del gruppo termina la raccolta cibo, incrementa $C_k$.
 3. **Se** $C_k < Size(G_k)$: L'utente esegue una `sem_wait` bloccante su $Sem_k$.
 4. **Se** $C_k = Size(G_k)$ (l'ultimo arrivato): L'utente esegue un'operazione `sem_op` con valore positivo pari a $Size(G_k) - 1$, sbloccando simultaneamente tutti i compagni in attesa (Broadcast).
+
+```mermaid
+sequenceDiagram
+  participant U1 as Utente 1
+  participant U2 as Utente 2 (Ultimo)
+  participant SHM as Shared Memory (Counter)
+  participant SEM as Semaforo Gruppo
+
+  Note over U1, U2: Fase Prelievo Cibo Completata
+
+  U1->>SHM: Incrementa Counter (C=1)
+  SHM-->>U1: C < Size
+  U1->>SEM: sem_wait (Bloccante)
+  Note right of U1: U1 si addormenta
+
+  Note over U2: ...tempo passa...
+
+  U2->>SHM: Incrementa Counter (C=2)
+  SHM-->>U2: C == Size (Tutti arrivati!)
+  
+  Note right of U2: L'ultimo sblocca tutti
+  U2->>SEM: sem_signal (Valore +N)
+  SEM-->>U1: Sblocco (Wake up)
+  
+  U1->>U1: Procedi alla Cassa
+  U2->>U2: Procedi alla Cassa
+```
 
 ### 4.3) Gestione "Utenti con Ticket" (Priority Resource)
 
@@ -198,12 +348,64 @@ Per soddisfare il requisito del blocco temporaneo dei servizi, è stato sviluppa
 * **Architettura:** Il processo non è figlio del Responsabile, ma si collega autonomamente alla *Shared Memory* esistente tramite le chiavi IPC note.
 * **Funzionamento:** Il tool permette di selezionare specifici worker (tramite ID) e impostare un `strike_end_time` futuro. I processi worker controllano periodicamente questo timestamp: se attivo, entrano in uno stato di `nanosleep` simulando l'interruzione del servizio senza consumare CPU (*Communication Disorder*).
 
+```mermaid
+sequenceDiagram
+  participant ADM as Admin (Console)
+  participant TOOL as Tool "sciopero"
+  participant SHM as Shared Memory
+  participant WORK as Worker Target
+
+  Note over ADM, TOOL: Avvio Tool Esterno
+  ADM->>TOOL: Input: ID Worker & Durata
+  TOOL->>SHM: Attach SHM (shmget/shmat)
+  
+  activate TOOL
+  TOOL->>SHM: Scrittura "strike_end_time" nello slot Worker
+  deactivate TOOL
+  
+  Note over WORK: Normale Ciclo di Lavoro
+  
+  loop Controllo Periodico
+    WORK->>SHM: Leggi strike_end_time
+    
+    alt Tempo Corrente < Strike End Time
+      WORK->>WORK: nanosleep() (Communication Disorder)
+      Note right of WORK: Il Worker è bloccato<br>senza consumare CPU
+    else Tempo Scaduto
+      WORK->>WORK: Riprendi Servizio
+    end
+  end
+```
+
 ### 5.2) Generazione Dinamica dell'Utenza
 
 Il modulo `generatore_utenti` permette l'iniezione di nuovi processi utente a simulazione già avviata.
 
 * **Smart Lifecycle:** A differenza di una semplice `fork`, questo modulo implementa una logica di sincronizzazione "Smart Sync". I nuovi utenti si agganciano ai semafori esistenti e, per evitare terminazioni premature o zombie, il generatore attende il segnale di cambio giorno (`SIGUSR1`) dal Responsabile prima di effettuare il *cleanup* dei processi generati.
 * **Safety:** Il sistema verifica preventivamente che il numero totale di utenti non superi i limiti degli array statici allocati in Shared Memory (`MAX_TOTAL_USERS`), prevenendo *buffer overflow*.
+
+```mermaid
+graph LR
+  Start((Start)) --> Init["Parsing Argomenti<br>(N Nuovi Utenti)"]
+  Init --> Check{"Safety Check:<br>Totale < MAX_TOTAL_USERS?"}
+  
+  Check -->|No| Error["Errore: Buffer Overflow<br>Terminazione"]
+  Check -->|Sì| Loop["Loop Generazione (x N)"]
+  
+  subgraph "Smart Lifecycle"
+    Loop --> Fork[Fork Processo Utente]
+    Fork --> Attach["Attach IPC Esistenti<br>(Semafori & Code)"]
+    Attach --> Logic["Logica Utente Standard<br>(Coda -> Cibo -> Cassa)"]
+  end
+  
+  Fork --> WaitSig["Parent: Attesa SIGUSR1<br>(Fine Giornata)"]
+  WaitSig --> Clean["Cleanup Processi Figli"]
+  Clean --> End((End))
+  Error --> End
+  
+  style Check fill:#fff9c4,stroke:#fbc02d
+  style WaitSig fill:#e1f5fe,stroke:#01579b
+```
 
 ### 5.3) Data Export & Reporting
 
@@ -212,6 +414,30 @@ Il sistema integra un modulo di persistenza (`stats.c`) che esporta i dati in fo
 * **Report Giornalieri:** Generati al termine di ogni ciclo di barriera, contengono metriche granulari (delta giornalieri).
 * **Report Finale:** Aggrega i dati globali (es. `Totale Ricavi`, `Media Avanzi`).
 * **Integrità:** L'accesso al file system è protetto da lock logici per evitare scritture concorrenti corrotte.
+
+```mermaid
+graph LR
+  Barrier["Fine Giornata<br>(Sblocco Barriera)"] --> Calc["Calcolo Metriche Giornaliere<br>(Revenue, Served, Left)"]
+  
+  Calc --> CheckExport{"EXPORT_DAILY_REPORTS_CSV?"}
+  
+  CheckExport -- True --> WriteCumulative["Append Riga a<br>File Cumulativo (History)"]
+  CheckExport -- False --> Skip1[Skip]
+  
+  WriteCumulative --> CheckSingle{"CREATE_DAILY_SINGLE_FILES == 1?"}
+  Skip1 --> UpdateGlobal
+  
+  CheckSingle -- True --> WriteSingle["Creazione File:<br>days/daily_report_{Giorno}.csv"]
+  CheckSingle -- False --> UpdateGlobal
+  
+  WriteSingle --> UpdateGlobal["Aggiornamento Variabili Globali<br>in Shared Memory"]
+  
+  UpdateGlobal --> FinalReport["Report Finale (Aggregato)<br>a fine simulazione"]
+
+  style CheckExport fill:#ffccbc,stroke:#d84315
+  style CheckSingle fill:#ffccbc,stroke:#d84315
+  style WriteSingle fill:#c8e6c9,stroke:#2e7d32
+```
 
 ---
 

@@ -4,7 +4,7 @@ author: "André Marguerettaz"
 date: "2026-01-17"
 fontsize: 10pt
 papersize: a4
-geometry: "margin=2.5cm"
+geometry: "margin=2cm"
 mainfont: "DejaVu Serif"
 sansfont: "DejaVu Sans"
 monofont: "DejaVu Sans Mono"
@@ -19,11 +19,15 @@ header-includes: |
       {\end{tcolorbox}}
 ---
 
+
 # Relazione Tecnica: Progetto "Oasi del Golfo"
 
-**Corso:** Sistemi Operativi 2025/2026\
-**Autore:** André Marguerettaz\
-**Matricola:** 1152060\
+**Corso:** Sistemi Operativi 2025/2026
+
+**Autore:** André Marguerettaz
+
+**Matricola:** 1152060
+
 **Repository GitHub:** [https://github.com/l0gic5/servizio_mensa](https://github.com/l0gic5/servizio_mensa)
 
 ---
@@ -52,6 +56,8 @@ Il sistema è progettato per essere **adattivo**: monitora le performance giorna
 
 L'applicazione è sviluppata in linguaggio C (standard C99) per ambiente Linux, seguendo rigorosamente la filosofia Unix: ogni entità attiva nella simulazione corrisponde a un processo indipendente del sistema operativo.
 
+![System Architecture](./system_architecture.png)
+
 ### 2.1) Modello dei Processi
 
 Il ciclo di vita della simulazione è orchestrato gerarchicamente:
@@ -62,14 +68,22 @@ Il ciclo di vita della simulazione è orchestrato gerarchicamente:
      * Effettua il *fork* ed *execve* di tutti i processi figli.
      * Gestisce il clock della simulazione e la sincronizzazione di fine giornata (Barrier).
      * Esegue l'algoritmo di riallocazione dei ruoli (descritto nella Sez. 4).
-2. **Processi Worker (`operatore` e `cassa`)**:
+
+![Master](./master.png)
+
+1. **Processi Worker (`operatore` e `cassa`)**:
       * Simulano il personale della mensa.
       * Sono generici all'avvio: il loro ruolo (Primi, Secondi, Caffè) è determinato dinamicamente leggendo la *Shared Memory*.
       * Competono per l'acquisizione delle risorse "Postazione" tramite semafori.
-3. **Processi Client (`utente`)**:
+
+![Workers](./workers.png)
+
+1. **Processi Client (`utente`)**:
       * Simulano il comportamento dei clienti.
       * Implementano una macchina a stati finiti: *Scelta Menu -> Coda -> Ordine -> Attesa Gruppo -> Pagamento -> Consumo*.
       * Gestiscono autonomamente i timeout (impazienza) e la rinuncia al servizio in caso di congestione.
+
+![User](./user.png)
 
 ### 2.2) Gestione delle Risorse IPC
 
@@ -86,7 +100,7 @@ La comunicazione e la sincronizzazione tra processi avvengono esclusivamente tra
 
 *In questa sezione è riportato il diagramma di flusso che illustra le interazioni tra i processi e l'uso delle risorse IPC.*
 
-![Schema IPC](./diagramma.png)
+![Schema IPC](./schema_ipc.png)
 
 ---
 
@@ -168,6 +182,8 @@ $$Workers_i = \left\lfloor N_{workers} \cdot \frac{S_i}{ \sum{S_k} } \right\rflo
 
 I resti della divisione vengono assegnati iterativamente alle stazioni con il residuo maggiore (approccio *Greedy*) per garantire che $\sum{Workers_i} = N_{workers}$.
 
+![Smart Rebalancing](./smart_rebalancing.png)
+
 ### 4.2) Gestione dei Gruppi (Pattern Barriera Custom)
 
 La specifica richiede che gli utenti appartenenti allo stesso gruppo attendano il completamento della raccolta cibo di tutti i membri prima di procedere alla cassa.
@@ -177,6 +193,8 @@ Questa logica è implementata tramite una **Barriera di Sincronizzazione Locale*
 2. Quando un utente del gruppo termina la raccolta cibo, incrementa $C_k$.
 3. **Se** $C_k < Size(G_k)$: L'utente esegue una `sem_wait` bloccante su $Sem_k$.
 4. **Se** $C_k = Size(G_k)$ (l'ultimo arrivato): L'utente esegue un'operazione `sem_op` con valore positivo pari a $Size(G_k) - 1$, sbloccando simultaneamente tutti i compagni in attesa (Broadcast).
+
+![Barrier Sync](./barrier_sync.png)
 
 ### 4.3) Gestione "Utenti con Ticket" (Priority Resource)
 
@@ -201,12 +219,16 @@ Per soddisfare il requisito del blocco temporaneo dei servizi, è stato sviluppa
 * **Architettura:** Il processo non è figlio del Responsabile, ma si collega autonomamente alla *Shared Memory* esistente tramite le chiavi IPC note.
 * **Funzionamento:** Il tool permette di selezionare specifici worker (tramite ID) e impostare un `strike_end_time` futuro. I processi worker controllano periodicamente questo timestamp: se attivo, entrano in uno stato di `nanosleep` simulando l'interruzione del servizio senza consumare CPU (*Communication Disorder*).
 
+![Communication Disorder](./communication_disorder.png)
+
 ### 5.2) Generazione Dinamica dell'Utenza
 
 Il modulo `generatore_utenti` permette l'iniezione di nuovi processi utente a simulazione già avviata.
 
 * **Smart Lifecycle:** A differenza di una semplice `fork`, questo modulo implementa una logica di sincronizzazione "Smart Sync". I nuovi utenti si agganciano ai semafori esistenti e, per evitare terminazioni premature o zombie, il generatore attende il segnale di cambio giorno (`SIGUSR1`) dal Responsabile prima di effettuare il *cleanup* dei processi generati.
 * **Safety:** Il sistema verifica preventivamente che il numero totale di utenti non superi i limiti degli array statici allocati in Shared Memory (`MAX_TOTAL_USERS`), prevenendo *buffer overflow*.
+
+![User Generator](./user_generator.png)
 
 ### 5.3) Data Export & Reporting
 
@@ -215,6 +237,8 @@ Il sistema integra un modulo di persistenza (`stats.c`) che esporta i dati in fo
 * **Report Giornalieri:** Generati al termine di ogni ciclo di barriera, contengono metriche granulari (delta giornalieri).
 * **Report Finale:** Aggrega i dati globali (es. `Totale Ricavi`, `Media Avanzi`).
 * **Integrità:** L'accesso al file system è protetto da lock logici per evitare scritture concorrenti corrotte.
+
+![Data Export](./data_export.png)
 
 ---
 
@@ -264,7 +288,7 @@ Di seguito è riportata l'alberatura delle directory principali:
 .
 ├── src/                  # Codice sorgente principale
 │   ├── common/           # Moduli condivisi (IPC, Config, Logger)
-│   ├── processes/        # (Responsabile, Utente, Operatori)
+│   ├── processes/        # Logica di business (Responsabile, Utente, Operatori)
 │   └── executables/      # Tool esterni (Sciopero, Generatore Utenti)
 ├── include/              # Header files (.h)
 ├── test/                 # Unit Tests (Unity Framework)
