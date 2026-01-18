@@ -19,6 +19,8 @@
 #define COLOR_LIGHT_GRAY "\x1b[37m"
 #define COLOR_RESET "\x1b[0m"
 
+#define LOG_CTX_WIDTH 38
+
 #define FLUSH_LOGS                                                             \
   do {                                                                         \
     fflush(stdout);                                                            \
@@ -92,4 +94,52 @@
   "~    )         Da Marina         (    ~\n"                                  \
   "   ~  '  -------------------------  '  ~   \n"                              \
   "       ^   ~   ~   ~   ~   ~   ~   ^       \n"
+
+/**
+ * @brief Calcola l'offset tra byte e caratteri visibili in una stringa UTF-8.
+ *
+ * Utile per allineamenti di output con caratteri speciali (es: accenti).
+ *
+ * @param s Stringa UTF-8 da analizzare.
+ * @return Numero di byte in più rispetto ai caratteri visibili.
+ */
+static inline int get_utf8_offset(const char *s) {
+  int len_bytes = 0;
+  int len_chars = 0;
+
+  while (*s) {
+    if ((*s & 0xC0) != 0x80) {
+      len_chars++;
+    }
+    len_bytes++;
+    s++;
+  }
+
+  return len_bytes - len_chars;
+}
+
+/**
+ * @brief Restituisce una stringa di spazi per l'indentazione nei log.
+ *
+ * @param n Numero di spazi desiderati.
+ * @return const char* Puntatore a una stringa contenente n spazi.
+ */
+static inline const char *log_spaces(int n) {
+  // 256
+  static const char padding[] =
+      "                                                                "
+      "                                                                ";
+
+  const int max_len = sizeof(padding) - 1;
+
+  if (n < 0) {
+    n = 0;
+  }
+  if (n > max_len) {
+    n = max_len;
+  }
+
+  return padding + (max_len - n);
+}
+
 #endif

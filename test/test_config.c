@@ -317,9 +317,9 @@ void test_coherence_with_real_default_file(void) {
                                 "max_users_per_group");
 
   // 7) LOGISTICA
-  TEST_ASSERT_EQUAL_INT_MESSAGE(2, config.daily_primi_count,
+  TEST_ASSERT_EQUAL_INT_MESSAGE(3, config.daily_primi_count,
                                 "daily_primi_count");
-  TEST_ASSERT_EQUAL_INT_MESSAGE(2, config.daily_secondi_count,
+  TEST_ASSERT_EQUAL_INT_MESSAGE(3, config.daily_secondi_count,
                                 "daily_secondi_count");
   TEST_ASSERT_EQUAL_INT_MESSAGE(4, config.daily_dolci_count,
                                 "daily_dolci_count");

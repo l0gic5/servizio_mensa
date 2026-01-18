@@ -365,8 +365,8 @@ static void set_default_values(Config *config) {
   config->max_users_per_group = 4;
 
   // 7) LOGISTICA
-  config->daily_primi_count = 2;
-  config->daily_secondi_count = 2;
+  config->daily_primi_count = 3;
+  config->daily_secondi_count = 3;
   config->daily_dolci_count = 4;
   config->daily_caffe_count = 5;
 

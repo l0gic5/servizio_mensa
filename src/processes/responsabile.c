@@ -306,116 +306,185 @@ void compute_initial_workers_distribution(int available_workers, int t_primi,
 }
 
 /**
- * @brief Algoritmo Smart: Ricalcola i ruoli basandosi sullo stress reale.
- * * Invece di usare solo le stime del config, guarda i tempi di attesa medi
- * accumulati fino al giorno precedente. Assegna più risorse dove
- * l'attesa è maggiore.
+ * @brief Assegna in sicurezza un ruolo a un range di indici.
+ * @param array L'array da riempire
+ * @param current_idx Puntatore all'indice corrente (viene aggiornato)
+ * @param count Quanti ne vuoi aggiungere
+ * @param role Il ruolo da assegnare
+ * @param max_size Dimensione massima dell'array
+ */
+static void safe_assign_roles(int *array, int *current_idx, int count, int role,
+                              int max_size) {
+  for (int i = 0; i < count; i++) {
+    if (*current_idx < max_size) {
+      array[(*current_idx)++] = role;
+    } else {
+      break;
+    }
+  }
+}
+
+/**
+ * @brief Algoritmo Smart Adaptive (EMA - Exponential Moving Average): Ricalcola
+ * i ruoli basandosi sul trend recente.
+ *
+ * Utilizza la Media Mobile Esponenziale per dare
+ * maggior peso ai dati del giorno appena trascorso rispetto alla storia
+ * passata.
+ *
+ * Formula: `EMA_oggi = alpha * Daily_Avg + (1 - alpha) * EMA_ieri`
+ *
+ * - `alpha`: fattore di smorzamento (0 < alpha < 1) => valori più alti danno
+ * più peso ai dati recenti
+ *
+ * - `Daily_Avg`: tempo medio di attesa calcolato per il giorno corrente
+ *
+ * - `EMA_ieri`: valore EMA calcolato fino a ieri
  *
  * @param available_workers Numero totale di worker disponibili (esclusa la
  * cassa).
  */
 void perform_dynamic_reconfiguration(int available_workers) {
+  const double ALPHA = 0.35;
+
+  static double ema_wait_p = 0.0;
+  static double ema_wait_s = 0.0;
+  static double ema_wait_c = 0.0;
+
+  static double prev_total_wait_p = 0.0;
+  static double prev_total_wait_s = 0.0;
+  static double prev_total_wait_c = 0.0;
+
+  static int prev_plates_p = 0;
+  static int prev_plates_s = 0;
+  static int prev_plates_c = 0;
+
   sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
+  double curr_total_wait_p = g_stats->total_wait_time_primi;
+  double curr_total_wait_s = g_stats->total_wait_time_secondi;
+  double curr_total_wait_c =
+      g_stats->total_wait_time_caffe + g_stats->total_wait_time_dolci;
 
-  double wait_p =
-      (g_stats->total_plates_primi > 0)
-          ? g_stats->total_wait_time_primi / g_stats->total_plates_primi
-          : 0.0;
-
-  double wait_s =
-      (g_stats->total_plates_secondi > 0)
-          ? g_stats->total_wait_time_secondi / g_stats->total_plates_secondi
-          : 0.0;
-
-  double wait_c =
-      (g_stats->total_plates_caffe > 0)
-          ? g_stats->total_wait_time_caffe / g_stats->total_plates_caffe
-          : 0.0;
-
+  int curr_plates_p = g_stats->total_plates_primi;
+  int curr_plates_s = g_stats->total_plates_secondi;
+  int curr_plates_c = g_stats->total_plates_caffe + g_stats->total_plates_dolci;
   sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
 
-  // assegnazione minima garantita (1 per tipo)
+  // statistiche giornaliere
+  double daily_wait_p = curr_total_wait_p - prev_total_wait_p;
+  double daily_wait_s = curr_total_wait_s - prev_total_wait_s;
+  double daily_wait_c = curr_total_wait_c - prev_total_wait_c;
+
+  int daily_plates_p = curr_plates_p - prev_plates_p;
+  int daily_plates_s = curr_plates_s - prev_plates_s;
+  int daily_plates_c = curr_plates_c - prev_plates_c;
+
+  // medie secche di oggi
+  double daily_avg_p =
+      (daily_plates_p > 0) ? daily_wait_p / daily_plates_p : 0.0;
+  double daily_avg_s =
+      (daily_plates_s > 0) ? daily_wait_s / daily_plates_s : 0.0;
+  double daily_avg_c =
+      (daily_plates_c > 0) ? daily_wait_c / daily_plates_c : 0.0;
+
+  if (ema_wait_p == 0.0) {
+    ema_wait_p = daily_avg_p;
+  } else {
+    ema_wait_p = (ALPHA * daily_avg_p) + ((1.0 - ALPHA) * ema_wait_p);
+  }
+
+  if (ema_wait_s == 0.0) {
+    ema_wait_s = daily_avg_s;
+  } else {
+    ema_wait_s = (ALPHA * daily_avg_s) + ((1.0 - ALPHA) * ema_wait_s);
+  }
+
+  if (ema_wait_c == 0.0) {
+    ema_wait_c = daily_avg_c;
+  } else {
+    ema_wait_c = (ALPHA * daily_avg_c) + ((1.0 - ALPHA) * ema_wait_c);
+  }
+
+  // salvataggio per il prossimo giorno
+  prev_total_wait_p = curr_total_wait_p;
+  prev_total_wait_s = curr_total_wait_s;
+  prev_total_wait_c = curr_total_wait_c;
+  prev_plates_p = curr_plates_p;
+  prev_plates_s = curr_plates_s;
+  prev_plates_c = curr_plates_c;
+
+  // fallback
+  if (ema_wait_p == 0 && ema_wait_s == 0 && ema_wait_c == 0) {
+    ema_wait_p = (double)g_config.avg_service_primi;
+    ema_wait_s = (double)g_config.avg_service_secondi;
+    ema_wait_c = (double)g_config.avg_service_caffe;
+  }
+
+  // assegnazione minima (1 per tipo)
   int w_p = 1, w_s = 1, w_c = 1;
   int remaining = available_workers - 3;
 
-  // fallback mancanza dati
-  if (wait_p == 0 && wait_s == 0 && wait_c == 0) {
-    wait_p = (double)g_config.avg_service_primi;
-    wait_s = (double)g_config.avg_service_secondi;
-    wait_c = (double)g_config.avg_service_caffe;
-  }
+  double total_stress = ema_wait_p + ema_wait_s + ema_wait_c;
 
-  double total_wait = wait_p + wait_s + wait_c;
-
-  if (total_wait > 0) {
-    int extra_p = (int)((wait_p / total_wait) * remaining);
-    int extra_s = (int)((wait_s / total_wait) * remaining);
-    int extra_c = (int)((wait_c / total_wait) * remaining);
+  if (total_stress > 0) {
+    int extra_p = (int)((ema_wait_p / total_stress) * remaining);
+    int extra_s = (int)((ema_wait_s / total_stress) * remaining);
+    int extra_c = (int)((ema_wait_c / total_stress) * remaining);
 
     w_p += extra_p;
     w_s += extra_s;
     w_c += extra_c;
 
+    // distribuzione resto (greedy sui residui)
     int assigned = extra_p + extra_s + extra_c;
     int leftovers = remaining - assigned;
 
     while (leftovers > 0) {
-      if (wait_p >= wait_s && wait_p >= wait_c) {
+      if (ema_wait_p >= ema_wait_s && ema_wait_p >= ema_wait_c) {
         w_p++;
-        wait_p /= 2;
-      } else if (wait_s >= wait_p && wait_s >= wait_c) {
+        ema_wait_p *= 0.5;
+      } else if (ema_wait_s >= ema_wait_p && ema_wait_s >= ema_wait_c) {
         w_s++;
-        wait_s /= 2;
+        ema_wait_s *= 0.5;
       } else {
         w_c++;
-        wait_c /= 2;
+        ema_wait_c *= 0.5;
       }
       leftovers--;
     }
   } else {
     while (remaining > 0) {
-      if (remaining > 0) {
+      if (remaining-- > 0)
         w_p++;
-        remaining--;
-      }
-      if (remaining > 0) {
+      if (remaining-- > 0)
         w_s++;
-        remaining--;
-      }
-      if (remaining > 0) {
+      if (remaining-- > 0)
         w_c++;
-        remaining--;
-      }
     }
   }
 
   sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
-
   int active_cassa = g_worker_config->active_cassa;
+  int index = active_cassa;
 
-  int index = 1;
-
-  for (int k = 0; k < w_p; k++) {
-    g_worker_config->worker_roles[index++] = OP_PRIMI;
-  }
-  for (int k = 0; k < w_s; k++) {
-    g_worker_config->worker_roles[index++] = OP_SECONDI;
-  }
-  for (int k = 0; k < w_c; k++) {
-    g_worker_config->worker_roles[index++] = OP_CAFFE;
-  }
+  safe_assign_roles(g_worker_config->worker_roles, &index, w_p, OP_PRIMI,
+                    MAX_WORKERS);
+  safe_assign_roles(g_worker_config->worker_roles, &index, w_s, OP_SECONDI,
+                    MAX_WORKERS);
+  safe_assign_roles(g_worker_config->worker_roles, &index, w_c, OP_CAFFE,
+                    MAX_WORKERS);
 
   g_worker_config->active_primi = w_p;
   g_worker_config->active_secondi = w_s;
   g_worker_config->active_caffe = w_c;
-
   sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
 
-  LOG_CONF(
-      log_tag,
-      "Reconfig Smart (basata su attese): Cassa: %d, Primi:%d, Secondi:%d, "
-      "Caffè:%d",
-      active_cassa, w_p, w_s, w_c);
+  LOG_CONF(log_tag,
+           "Reconfig Adaptive (EMA alpha=%.2f): Cassa: %d, Primi: %d, "
+           "Secondi: %d, Caffè: %d "
+           "[Stress: P = %.2fs, S = %.2fs, C = %.2fs]",
+           ALPHA, active_cassa, w_p, w_s, w_c, ema_wait_p, ema_wait_s,
+           ema_wait_c);
 }
 
 /**
@@ -471,10 +540,15 @@ void start_all_processes(const char *config_path) {
 
   sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
 
+  const char *ind = log_spaces(LOG_CTX_WIDTH + 8);
   LOG_CONF(log_tag,
-           "Distribuzione Iniziale:\n  - Cassa: %d\n  - Primi: %d\n  - "
-           "Secondi: %d\n  - Caffè: %d",
-           w_cassa, w_primi, w_secondi, w_caffe);
+           "Distribuzione Iniziale:"
+           "\n%s- %-8s: %d"
+           "\n%s- %-8s: %d"
+           "\n%s- %-8s: %d"
+           "\n%s- %-*s: %d",
+           ind, "Cassa", w_cassa, ind, "Primi", w_primi, ind, "Secondi",
+           w_secondi, ind, 8 + get_utf8_offset("Caffè"), "Caffè", w_caffe);
 
   // spawn Workers
   spawn_worker_group(OP_CASSA, w_cassa, PATH_CASSA, config_path,
@@ -709,9 +783,10 @@ void perform_periodic_refill() {
   // }
 
   // LOG_INFO(log_tag,
-  //          "Refill eseguito. Stato cucina:\n  - %d Primi\n  - %d Secondi\n  - %d Dolci\n  - %d Caffè",
-  //          g_kitchen->remaining_primi, g_kitchen->remaining_secondi,
-  //          g_kitchen->remaining_dolci, g_kitchen->remaining_caffe);
+  //          "Refill eseguito. Stato cucina:\n  - %d Primi\n  - %d Secondi\n  -
+  //          %d Dolci\n  - %d Caffè", g_kitchen->remaining_primi,
+  //          g_kitchen->remaining_secondi, g_kitchen->remaining_dolci,
+  //          g_kitchen->remaining_caffe);
   sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
 }
 
@@ -837,44 +912,25 @@ void handle_day_end_sync() {
 ///////////////////////
 
 /**
- * @brief Calcola l'offset tra byte e caratteri visibili in una stringa UTF-8.
+ * @brief Riempie il buffer con i nomi dei piatti separati da virgola.
  *
- * Utile per allineamenti di output con caratteri speciali (es: accenti).
- *
- * @param s Stringa UTF-8 da analizzare.
- * @return Numero di byte in più rispetto ai caratteri visibili.
+ * @param dishes Array di piatti.
+ * @param count Numero di piatti nell'array.
+ * @param buffer Buffer dove scrivere la lista.
+ * @param size Dimensione del buffer.
  */
-static int get_utf8_offset(const char *s) {
-  int len_bytes = 0;
-  int len_chars = 0;
-
-  while (*s) {
-    if ((*s & 0xC0) != 0x80) {
-      len_chars++;
-    }
-    len_bytes++;
-    s++;
-  }
-
-  return len_bytes - len_chars;
-}
-
-/**
- * @brief Helper per formattare e loggare una categoria di piatti in una riga
- * sola.
- */
-static void log_menu_category(const char *tag, const char *label, Dish *dishes,
-                              int count) {
+static void build_dish_list(Dish *dishes, int count, char *buffer,
+                            size_t size) {
   if (count == 0) {
+    snprintf(buffer, size, "(Nessuno)");
     return;
   }
 
-  char buffer[1024];
   int offset = 0;
   buffer[0] = '\0';
 
   for (int i = 0; i < count; i++) {
-    size_t remaining = sizeof(buffer) - (size_t)offset;
+    size_t remaining = size - (size_t)offset;
 
     int written = snprintf(buffer + offset, remaining, "%s%s",
                            (i > 0 ? ", " : ""), dishes[i].name);
@@ -884,11 +940,6 @@ static void log_menu_category(const char *tag, const char *label, Dish *dishes,
     }
     offset += written;
   }
-
-  int base_width = 8;
-  int real_width = base_width + get_utf8_offset(label);
-
-  LOG_CONF(tag, " - %-*s: %s", real_width, label, buffer);
 }
 
 /**
@@ -919,16 +970,37 @@ static void setup_day_start(int day, GlobalStats *start_snapshot) {
 
   generate_daily_menu(&g_kitchen->todays_menu, &g_config);
 
-  LOG_CONF(log_tag, "Menu del Giorno %d:", day);
+  char buf_primi[512];
+  char buf_secondi[512];
+  char buf_dolci[512];
+  char buf_caffe[512];
 
-  log_menu_category(log_tag, "Primi", g_kitchen->todays_menu.daily_primi,
-                    g_kitchen->todays_menu.primi_count);
-  log_menu_category(log_tag, "Secondi", g_kitchen->todays_menu.daily_secondi,
-                    g_kitchen->todays_menu.secondi_count);
-  log_menu_category(log_tag, "Dolci", g_kitchen->todays_menu.daily_dolci,
-                    g_kitchen->todays_menu.dolci_count);
-  log_menu_category(log_tag, "Caffè", g_kitchen->todays_menu.daily_caffe,
-                    g_kitchen->todays_menu.caffe_count);
+  build_dish_list(g_kitchen->todays_menu.daily_primi,
+                  g_kitchen->todays_menu.primi_count, buf_primi,
+                  sizeof(buf_primi));
+
+  build_dish_list(g_kitchen->todays_menu.daily_secondi,
+                  g_kitchen->todays_menu.secondi_count, buf_secondi,
+                  sizeof(buf_secondi));
+
+  build_dish_list(g_kitchen->todays_menu.daily_dolci,
+                  g_kitchen->todays_menu.dolci_count, buf_dolci,
+                  sizeof(buf_dolci));
+
+  build_dish_list(g_kitchen->todays_menu.daily_caffe,
+                  g_kitchen->todays_menu.caffe_count, buf_caffe,
+                  sizeof(buf_caffe));
+
+  const char *ind = log_spaces(LOG_CTX_WIDTH + 8);
+  LOG_CONF(log_tag,
+           "Menu del Giorno %d:\n"
+           "%s- %-8s: %s\n"
+           "%s- %-8s: %s\n"
+           "%s- %-8s: %s\n"
+           "%s- %-*s: %s",
+           day, ind, "Primi", buf_primi, ind, "Secondi", buf_secondi, ind,
+           "Dolci", buf_dolci, ind, 8 + get_utf8_offset("Caffè"), "Caffè",
+           buf_caffe);
 
   sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
 }
@@ -1171,11 +1243,17 @@ int main(int argc, char *argv[]) {
 
   // sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
 
+  const char *ind = log_spaces(LOG_CTX_WIDTH + 8);
   LOG_CONF(log_tag,
-           "Rifornimento iniziale completato:\n  - %d Primi\n  - %d Secondi\n  "
-           "- %d Dolci\n  - %d Caffè",
-           g_config.max_porzioni_primi, g_config.max_porzioni_secondi,
-           g_config.max_porzioni_dolci, g_config.max_porzioni_caffe);
+           "Rifornimento iniziale completato:\n"
+           "%s- %4d %-8s\n"
+           "%s- %4d %-8s\n"
+           "%s- %4d %-8s\n"
+           "%s- %4d %-8s",
+           ind, g_config.max_porzioni_primi, "Primi", ind,
+           g_config.max_porzioni_secondi, "Secondi", ind,
+           g_config.max_porzioni_dolci, "Dolci", ind,
+           g_config.max_porzioni_caffe, "Caffè");
 
   int day_counter = 1;
 
