@@ -251,7 +251,10 @@ int enter_queue(int sem_index, const char *queue_name, int timeout_sec) {
  *
  * @return 0 se servito con successo, -1 in caso di errore.
  */
-int perform_order(OpType type, int msg_type, double amount, bool has_ticket,
+/**
+ * @brief Esegue la transazione con un operatore o la cassa con TIMEOUT.
+ */
+int perform_order(Config *cfg, OpType type, int msg_type, double amount, bool has_ticket,
                   int item_index, const char *dish_name) {
   if (!g_running) {
     return -1;
@@ -274,12 +277,10 @@ int perform_order(OpType type, int msg_type, double amount, bool has_ticket,
   if (type == OP_CASSA) {
     LOG_INFO(log_tag, "Vado alla Cassa per pagare %.2f€...", amount);
   } else {
-
     if (dish_name && strlen(dish_name) > 0) {
       LOG_INFO(log_tag, "Ordino `%s` (%s)...", dish_name,
                ROLE_NAME_SINGULAR(type));
     } else {
-      // Fallback al nome generico (es. SECONDO)
       LOG_INFO(log_tag, "Ordino %s...", ROLE_NAME(type));
     }
   }
@@ -292,16 +293,42 @@ int perform_order(OpType type, int msg_type, double amount, bool has_ticket,
   }
 
   MessageResponse resp;
-  // msgrcv bloccante su mtype = mio PID
-  int bytes = receive_message(g_msg_id, &resp, RES_PAYLOAD_SIZE, getpid(), 0);
+  int bytes = -1;
+
+  long poll_interval_ms = 100;
+  long max_retries = (cfg->user_queue_timeout_sec * 1000) / poll_interval_ms;
+
+  for (int i = 0; i < max_retries; i++) {
+    if (!g_running) {
+      // controllo se arrivato SIGINT/SIGTERM
+      return -1;
+    }
+
+    // IPC_NOWAIT: se non c'è messaggio, torna subito con errno = ENOMSG
+    bytes = receive_message(g_msg_id, &resp, RES_PAYLOAD_SIZE, getpid(),
+                            IPC_NOWAIT);
+
+    if (bytes >= 0) {
+      break;
+    }
+
+    if (errno == ENOMSG) {
+      struct timespec ts = {0, poll_interval_ms * 1000000L}; // ns
+      nanosleep(&ts, NULL);
+    } else if (errno == EINTR) {
+      return -1;
+    } else {
+      LOG_ERR(log_tag, "Errore critico in msgrcv");
+      return -1;
+    }
+  }
 
   if (bytes == -1) {
-    // se fallisce (es. fine giornata mentre aspetto):
-    // => logga solo se non è EINTR pulito
-    if (errno != EINTR) {
-      LOG_ERR(log_tag, "Nessuna risposta da %s", ROLE_NAME(type));
-      // mark_as_refused();
-    }
+    LOG_WARN(
+        log_tag,
+        "TIMEOUT attesa risposta da %s (Operatore lento o morto). Rinuncio.",
+        ROLE_NAME(type));
+
     return -1;
   }
 
@@ -315,7 +342,6 @@ int perform_order(OpType type, int msg_type, double amount, bool has_ticket,
     LOG_INFO(log_tag, "Ricevuto un %s da Operatore %d.",
              ROLE_NAME_SINGULAR(type), resp.operator_pid);
   }
-  // ELSE scontrino stampato in user_routine dopo il return
 
   return 0;
 }
@@ -541,7 +567,7 @@ void user_routine(Config *cfg, double *current_budget, bool has_ticket,
         strncpy(dish_name, g_kitchen->todays_menu.daily_primi[index].name, 63);
       }
 
-      int res = perform_order(OP_PRIMI, MSG_TYPE_ORDER_PRIMI, 0.0, has_ticket,
+      int res = perform_order(cfg, OP_PRIMI, MSG_TYPE_ORDER_PRIMI, 0.0, has_ticket,
                               MSG_REQ_PRIMO_INDEX, dish_name);
 
       if (res == 0) {
@@ -578,7 +604,7 @@ void user_routine(Config *cfg, double *current_budget, bool has_ticket,
                 63);
       }
 
-      int res = perform_order(OP_SECONDI, MSG_TYPE_ORDER_SECONDI, 0.0,
+      int res = perform_order(cfg, OP_SECONDI, MSG_TYPE_ORDER_SECONDI, 0.0,
                               has_ticket, MSG_REQ_SECONDO_INDEX, dish_name);
 
       if (res == 0) {
@@ -613,7 +639,7 @@ void user_routine(Config *cfg, double *current_budget, bool has_ticket,
         strncpy(dish_name, g_kitchen->todays_menu.daily_dolci[index].name, 63);
       }
 
-      int res = perform_order(OP_CAFFE, MSG_TYPE_ORDER_CAFFE, 0.0, has_ticket,
+      int res = perform_order(cfg, OP_CAFFE, MSG_TYPE_ORDER_CAFFE, 0.0, has_ticket,
                               MSG_REQ_DOLCE_INDEX, dish_name);
 
       if (res == 0) {
@@ -671,7 +697,7 @@ void user_routine(Config *cfg, double *current_budget, bool has_ticket,
     if (enter_queue(SEM_INDEX_SEATS_CASSA, "CASSA",
                     cfg->user_queue_timeout_sec) == 0) {
 
-      if (perform_order(OP_CASSA, MSG_TYPE_PAYMENT, importo_effettivo,
+      if (perform_order(cfg, OP_CASSA, MSG_TYPE_PAYMENT, importo_effettivo,
                         has_ticket, -1, "") != -1) {
         // Addebito effettivo
         *current_budget -= importo_effettivo;
@@ -718,7 +744,7 @@ void user_routine(Config *cfg, double *current_budget, bool has_ticket,
         strncpy(dish_name, g_kitchen->todays_menu.daily_caffe[index].name, 63);
       }
 
-      int res = perform_order(OP_CAFFE, MSG_TYPE_ORDER_CAFFE, 0.0, has_ticket,
+      int res = perform_order(cfg, OP_CAFFE, MSG_TYPE_ORDER_CAFFE, 0.0, has_ticket,
                               MSG_REQ_CAFFE_INDEX, dish_name);
 
       if (res == 0) {
