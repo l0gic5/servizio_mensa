@@ -197,8 +197,19 @@ void cleanup_resources() {
  *
  * Se la coda è piena (timeout), l'utente rinuncia.
  *
+ * NOTA SEMAFORI:
+ * - I semafori delle code (SEM_INDEX_SEATS_*) sono inizializzati dal
+ *   processo responsabile.c con valore = capacità della coda.
+ * - Questo utente decrementa il semaforo (-1) per "occupare" un posto.
+ * - Dopo il servizio, l'utente incrementa (+1) il semaforo per liberare
+ *   il posto (vedi sem_signal dopo perform_order).
+ * - Gli operatori (operatore.c) e la cassa (cassa.c) NON manipolano
+ *   direttamente i semafori SEM_INDEX_SEATS_*; il controllo è gestito
+ *   interamente dagli utenti stessi.
+ *
  * @param sem_index Indice del semaforo della coda.
  * @param queue_name Nome descrittivo della coda (per log).
+ * @param timeout_sec Timeout in secondi per l'attesa.
  *
  * @return 0 se acquisito, -1 se rinuncia.
  */
@@ -211,7 +222,7 @@ int enter_queue(int sem_index, const char *queue_name, int timeout_sec) {
 
   struct sembuf sb;
   sb.sem_num = (unsigned short)sem_index;
-  sb.sem_op = -1;
+  sb.sem_op = -1;  // Decrementa il semaforo (occupa un posto in coda)
   sb.sem_flg = 0;
 
   struct timespec timeout;
@@ -219,6 +230,7 @@ int enter_queue(int sem_index, const char *queue_name, int timeout_sec) {
   timeout.tv_nsec = 0;
 
   // semtimedop => estensione GNU (richiede _GNU_SOURCE)
+  // Attende che il semaforo sia > 0 (posto disponibile) con timeout
   if (semtimedop(g_sem_id, &sb, 1, &timeout) == -1) {
 
     // timeout scaduto (coda troppo lenta)
@@ -585,6 +597,8 @@ void user_routine(Config *cfg, double *current_budget, bool has_ticket,
           conto_da_pagare += cfg->price_secondi;
         }
       }
+      // Rilascio il posto in coda PRIMI: incrementa il semaforo per
+      // permettere ad un altro utente di entrare in questa coda.
       sem_signal(g_sem_id, SEM_INDEX_SEATS_PRIMI);
     } else {
       *current_budget += cfg->price_primi;
@@ -622,6 +636,7 @@ void user_routine(Config *cfg, double *current_budget, bool has_ticket,
           conto_da_pagare += cfg->price_caffe;
         }
       }
+      // Rilascio il posto in coda SECONDI
       sem_signal(g_sem_id, SEM_INDEX_SEATS_SECONDI);
     } else {
       *current_budget += cfg->price_secondi;
@@ -657,6 +672,7 @@ void user_routine(Config *cfg, double *current_budget, bool has_ticket,
           conto_da_pagare += cfg->price_caffe;
         }
       }
+      // Rilascio il posto in coda DOLCI
       sem_signal(g_sem_id, SEM_INDEX_SEATS_DOLCI);
     } else {
       *current_budget += cfg->price_dolci;
@@ -714,6 +730,7 @@ void user_routine(Config *cfg, double *current_budget, bool has_ticket,
         LOG_INFO(log_tag, "Pagato %.2f€ [%s]", importo_effettivo, log_msg);
         paid = true;
       }
+      // Rilascio il posto in coda CASSA
       sem_signal(g_sem_id, SEM_INDEX_SEATS_CASSA);
     }
   }
@@ -756,6 +773,7 @@ void user_routine(Config *cfg, double *current_budget, bool has_ticket,
         // alta)
         LOG_WARN(log_tag, "Caffè finito! Ho pagato per nulla :(");
       }
+      // Rilascio il posto in coda CAFFE
       sem_signal(g_sem_id, SEM_INDEX_SEATS_CAFFE);
     } else {
       LOG_WARN(log_tag, "Coda caffè impossibile. Rinuncio al caffè pagato.");

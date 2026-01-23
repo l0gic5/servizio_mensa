@@ -206,6 +206,10 @@ int setup_ipc() {
   }
 
   // Init Semafori Code Utenti
+  // Questi semafori rappresentano i "posti disponibili" nelle code.
+  // - Gli utenti (utente.c) decrementano (-1) quando entrano in coda
+  // - Gli utenti incrementano (+1) quando escono dalla coda dopo il servizio
+  // - Né operatore.c né cassa.c manipolano direttamente questi semafori
   init_sem(g_sem_id, SEM_INDEX_SEATS_PRIMI, g_config.queue_capacity_primi);
   init_sem(g_sem_id, SEM_INDEX_SEATS_SECONDI, g_config.queue_capacity_secondi);
   init_sem(g_sem_id, SEM_INDEX_SEATS_DOLCI, g_config.queue_capacity_dolci);

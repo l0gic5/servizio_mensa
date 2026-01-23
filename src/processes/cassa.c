@@ -211,6 +211,12 @@ int main(int argc, char *argv[]) {
         resp.operator_pid = getpid();
         resp.status = ORDER_SUCCESS;
         send_message(g_msg_id, &resp, RES_PAYLOAD_SIZE, 0);
+
+        // NOTA: La cassa NON segnala il semaforo SEM_INDEX_SEATS_CASSA qui.
+        // Il controllo della coda è gestito interamente dagli utenti:
+        // - L'utente decrementa il semaforo quando entra in coda (utente.c)
+        // - L'utente incrementa il semaforo quando esce dalla coda dopo
+        //   aver ricevuto questa risposta (utente.c)
       } else if (bytes == -1) {
         if (errno == EINTR && g_day_signal) {
           struct sembuf sb = {SEM_INDEX_BARRIER, 1, 0};
