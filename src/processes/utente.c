@@ -77,8 +77,8 @@ void day_change_handler(int sig) {
  * Questa funzione SCRIVE (sem_op = +1) sul semaforo barriera SEM_INDEX_BARRIER
  * per notificare al processo Responsabile che questo Utente ha completato
  * le operazioni giornaliere. Il Responsabile LEGGE (sem_op = -1) questo
- * semaforo in responsabile.c (linea 906) attendendo che tutti i processi
- * attivi abbiano segnalato la fine prima di generare il report giornaliero.
+ * semaforo in responsabile.c:handle_day_end_sync() attendendo che tutti i
+ * processi attivi abbiano segnalato la fine prima di generare il report.
  */
 void signal_end_of_day() {
   struct sembuf sb = {SEM_INDEX_BARRIER, 1, 0};

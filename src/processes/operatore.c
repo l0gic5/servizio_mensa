@@ -100,9 +100,10 @@ void handle_day_end(int sig) {
  * il proprio turno giornaliero.
  *
  * Questa funzione SCRIVE (sem_op = +1) sul semaforo barriera SEM_INDEX_BARRIER.
- * Il Responsabile LEGGE (sem_op = -1) questo semaforo in responsabile.c
- * (linea 906) attendendo che tutti i processi attivi (Utenti, Operatori, Cassa)
- * abbiano segnalato la fine prima di procedere con la generazione del report.
+ * Il Responsabile LEGGE (sem_op = -1) questo semaforo in
+ * responsabile.c:handle_day_end_sync() attendendo che tutti i processi attivi
+ * (Utenti, Operatori, Cassa) abbiano segnalato la fine prima di procedere con
+ * la generazione del report.
  */
 void signal_end_of_day() {
   struct sembuf sb = {SEM_INDEX_BARRIER, 1, 0};

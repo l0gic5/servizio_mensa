@@ -905,9 +905,9 @@ void handle_day_end_sync() {
   // Ogni processo figlio SCRIVE (sem_op = +1) al semaforo quando termina,
   // sbloccando il Responsabile che può procedere con il report finale.
   // Processi che scrivono su questo semaforo:
-  //   - utente.c:signal_end_of_day() (linea 78)
-  //   - operatore.c:signal_end_of_day() (linea 103)
-  //   - cassa.c (linee 175, 216)
+  //   - utente.c:signal_end_of_day()
+  //   - operatore.c:signal_end_of_day()
+  //   - cassa.c (in risposta a g_day_signal)
   for (int i = 0; i < active_children; i++) {
     struct sembuf sb = {SEM_INDEX_BARRIER, -1, 0};
     struct timespec timeout = {g_config.day_end_barrier_wait_sec, 0};
