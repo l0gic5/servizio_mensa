@@ -455,6 +455,12 @@ void service_cycle(int msg_id, int sem_id, int sem_index, long avg_time,
 
       send_message(msg_id, &resp, RES_PAYLOAD_SIZE, 0);
 
+      // NOTA: L'operatore NON segnala i semafori SEM_INDEX_SEATS_* qui.
+      // Il controllo delle code è gestito interamente dagli utenti:
+      // - L'utente decrementa il semaforo quando entra in coda (utente.c)
+      // - L'utente incrementa il semaforo quando esce dalla coda dopo
+      //   aver ricevuto la risposta (utente.c)
+
       // tentativo pausa
       attempt_pause(sem_id, sem_index, &pauses_done, role, config);
     }
