@@ -171,6 +171,9 @@ int main(int argc, char *argv[]) {
     // SE arriva segnale di fine giornata, segnalo la barriera anche
     // nel caso in cui la coda non sia mai vuota
     // (msgrcv non blocca => niente EINTR).
+    // SCRIVE (sem_op = +1) sul semaforo barriera SEM_INDEX_BARRIER per
+    // notificare al Responsabile che la Cassa ha terminato le operazioni.
+    // Il Responsabile LEGGE questo semaforo in responsabile.c (linea 906).
     if (g_day_signal) {
       struct sembuf sb = {SEM_INDEX_BARRIER, 1, 0};
       semop(g_sem_id, &sb, 1);
@@ -213,6 +216,10 @@ int main(int argc, char *argv[]) {
         send_message(g_msg_id, &resp, RES_PAYLOAD_SIZE, 0);
       } else if (bytes == -1) {
         if (errno == EINTR && g_day_signal) {
+          // Segnale di fine giornata ricevuto durante msgrcv bloccante.
+          // SCRIVE (sem_op = +1) sul semaforo barriera SEM_INDEX_BARRIER per
+          // notificare al Responsabile che la Cassa ha terminato le operazioni.
+          // Il Responsabile LEGGE questo semaforo in responsabile.c (linea 906).
           struct sembuf sb = {SEM_INDEX_BARRIER, 1, 0};
           semop(g_sem_id, &sb, 1);
 
