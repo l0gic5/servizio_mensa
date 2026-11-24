@@ -63,10 +63,11 @@ void cleanup_resources(void) {
     detach_shm(g_worker_config);
   }
 
+  LOG_INFO(log_tag, "Chiusura operatore...");
+
   free(log_tag);
   names_destroy();
 
-  LOG_INFO(log_tag, "Chiusura operatore...");
   exit(0);
 }
 
@@ -369,7 +370,9 @@ void service_cycle(int msg_id, int sem_id, int sem_index, long avg_time,
   int pauses_done = 0;
 
   bool ended = false;
-  while (!g_day_ended && !ended) {
+  // g_running: senza questo controllo un SIGTERM (EINTR su msgrcv) farebbe
+  // solo ripartire il ciclo e l'operatore uscirebbe solo con SIGKILL
+  while (g_running && !g_day_ended && !ended) {
     time_t now = time(NULL);
     time_t strike_end = g_worker_config->strike_end_times[my_id];
 
@@ -384,12 +387,16 @@ void service_cycle(int msg_id, int sem_id, int sem_index, long avg_time,
       struct timespec rem = {0, 0};
 
       if (nanosleep(&req, &rem) == -1 && errno == EINTR) {
-        if (g_day_ended) {
+        if (g_day_ended || !g_running) {
           break;
         }
       }
 
       LOG_INFO(log_tag, "Sciopero terminato. Torno al lavoro.");
+    }
+
+    if (!g_running) {
+      break;
     }
 
     MessageRequest req;
@@ -452,6 +459,7 @@ void service_cycle(int msg_id, int sem_id, int sem_index, long avg_time,
       resp.mtype = req.sender_pid;
       resp.operator_pid = getpid();
       resp.status = order_status;
+      resp.request_id = req.request_id;
 
       send_message(msg_id, &resp, RES_PAYLOAD_SIZE, 0);
 

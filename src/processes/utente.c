@@ -39,6 +39,9 @@ static KitchenState *g_kitchen = NULL;
 static volatile sig_atomic_t g_running = 1;
 static volatile sig_atomic_t g_day_ended = 0;
 
+// contatore progressivo delle richieste inviate da questo utente
+static unsigned int g_next_request_id = 0;
+
 char *log_tag = "UTENTE";
 
 /**
@@ -153,6 +156,27 @@ void mark_as_poverty() {
 }
 
 /**
+ * @brief Segnala un ordine evaso dall'operatore ma abbandonato dall'utente
+ * (risposta arrivata dopo il timeout).
+ */
+void mark_order_abandoned() {
+  sem_mutex_acquire(g_sem_id, SEM_INDEX_MUTEX_STATS);
+  g_stats->total_abandoned_orders++;
+  sem_mutex_release(g_sem_id, SEM_INDEX_MUTEX_STATS);
+}
+
+/**
+ * @brief Quanto l'utente può ancora spendere oggi.
+ *
+ * Il budget reale viene addebitato SOLO alla cassa: prima del pagamento si
+ * aggiorna esclusivamente il conto, quindi la disponibilità residua è
+ * budget - conto.
+ */
+static double residual_budget(double budget, double bill) {
+  return budget - bill;
+}
+
+/**
  * @brief Inizializza IPC collegandosi alle risorse esistenti
  */
 int setup_ipc(void) {
@@ -212,7 +236,10 @@ int enter_queue(int sem_index, const char *queue_name, int timeout_sec) {
   struct sembuf sb;
   sb.sem_num = (unsigned short)sem_index;
   sb.sem_op = -1;
-  sb.sem_flg = 0;
+  // SEM_UNDO: deve combaciare con sem_signal() (che usa SEM_UNDO), altrimenti
+  // il semadj resta sbilanciato e all'uscita del processo il kernel
+  // decrementa il semaforo, riducendo in modo permanente la capacità della coda
+  sb.sem_flg = SEM_UNDO;
 
   struct timespec timeout;
   timeout.tv_sec = timeout_sec;
@@ -265,6 +292,7 @@ int perform_order(Config *cfg, OpType type, int msg_type, double amount, bool ha
   req.sender_pid = getpid();
   req.total_cost = amount;
   req.wants_ticket = has_ticket;
+  req.request_id = ++g_next_request_id;
 
   for (int i = 0; i < 4; i++) {
     req.food_choice[i] = 0;
@@ -296,9 +324,9 @@ int perform_order(Config *cfg, OpType type, int msg_type, double amount, bool ha
   int bytes = -1;
 
   long poll_interval_ms = 100;
-  long max_retries = (cfg->user_queue_timeout_sec * 1000) / poll_interval_ms;
+  double deadline = get_current_time_sec() + (double)cfg->user_queue_timeout_sec;
 
-  for (int i = 0; i < max_retries; i++) {
+  while (get_current_time_sec() < deadline) {
     if (!g_running) {
       // controllo se arrivato SIGINT/SIGTERM
       return -1;
@@ -309,7 +337,20 @@ int perform_order(Config *cfg, OpType type, int msg_type, double amount, bool ha
                             IPC_NOWAIT);
 
     if (bytes >= 0) {
-      break;
+      if (resp.request_id == req.request_id) {
+        break;
+      }
+
+      // risposta a un ordine precedente andato in timeout: l'operatore l'ha
+      // comunque evaso (piatto preparato / incasso registrato) => abbandonato
+      LOG_DEBUG(log_tag, "Scartata risposta obsoleta (req %u, attuale %u)",
+                resp.request_id, req.request_id);
+      if (resp.status == ORDER_SUCCESS) {
+        mark_order_abandoned();
+      }
+      bytes = -1;
+      // nessuna attesa: potrebbe esserci già la risposta corretta in coda
+      continue;
     }
 
     if (errno == ENOMSG) {
@@ -573,21 +614,20 @@ void user_routine(Config *cfg, double *current_budget, bool has_ticket,
       if (res == 0) {
         got_primo = true;
         update_wait_stats(OP_PRIMI, get_current_time_sec() - start);
-      } else if (res == -2) {
-        // storno budget
-        *current_budget += cfg->price_primi;
+      } else {
+        // primo non ricevuto (sold-out, timeout o interruzione): via dal conto
         conto_da_pagare -= cfg->price_primi;
 
-        if (!wants_secondo && *current_budget >= cfg->price_secondi) {
+        if (res == -2 && !wants_secondo &&
+            residual_budget(*current_budget, conto_da_pagare) >=
+                cfg->price_secondi) {
           LOG_INFO(log_tag, "Primo finito. Ripiego su SECONDO.");
           wants_secondo = true;
-          *current_budget -= cfg->price_secondi;
           conto_da_pagare += cfg->price_secondi;
         }
       }
       sem_signal(g_sem_id, SEM_INDEX_SEATS_PRIMI);
     } else {
-      *current_budget += cfg->price_primi;
       conto_da_pagare -= cfg->price_primi;
     }
   }
@@ -610,21 +650,20 @@ void user_routine(Config *cfg, double *current_budget, bool has_ticket,
       if (res == 0) {
         got_secondo = true;
         update_wait_stats(OP_SECONDI, get_current_time_sec() - start);
-      } else if (res == -2) {
-        *current_budget += cfg->price_secondi;
+      } else {
         conto_da_pagare -= cfg->price_secondi;
 
         // fallback caffè
-        if (!wants_caffe && *current_budget >= cfg->price_caffe) {
+        if (res == -2 && !wants_caffe &&
+            residual_budget(*current_budget, conto_da_pagare) >=
+                cfg->price_caffe) {
           LOG_INFO(log_tag, "Secondo finito. Ripiego su CAFFE.");
           wants_caffe = true;
-          *current_budget -= cfg->price_caffe;
           conto_da_pagare += cfg->price_caffe;
         }
       }
       sem_signal(g_sem_id, SEM_INDEX_SEATS_SECONDI);
     } else {
-      *current_budget += cfg->price_secondi;
       conto_da_pagare -= cfg->price_secondi;
     }
   }
@@ -645,21 +684,20 @@ void user_routine(Config *cfg, double *current_budget, bool has_ticket,
       if (res == 0) {
         got_dolce = true;
         update_wait_stats(OP_DOLCI, get_current_time_sec() - start);
-      } else if (res == -2) {
-        *current_budget += cfg->price_dolci;
+      } else {
         conto_da_pagare -= cfg->price_dolci;
 
         // fallback caffè
-        if (!wants_caffe && *current_budget >= cfg->price_caffe) {
+        if (res == -2 && !wants_caffe &&
+            residual_budget(*current_budget, conto_da_pagare) >=
+                cfg->price_caffe) {
           LOG_INFO(log_tag, "Dolce finito. Ripiego su CAFFE.");
           wants_caffe = true;
-          *current_budget -= cfg->price_caffe;
           conto_da_pagare += cfg->price_caffe;
         }
       }
       sem_signal(g_sem_id, SEM_INDEX_SEATS_DOLCI);
     } else {
-      *current_budget += cfg->price_dolci;
       conto_da_pagare -= cfg->price_dolci;
     }
   }

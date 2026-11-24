@@ -116,6 +116,11 @@ typedef struct message_request {
 
   int wants_ticket;
   double total_cost;
+
+  // id progressivo (per utente) della richiesta: l'operatore lo rimanda nella
+  // risposta, così l'utente può scartare risposte obsolete (arrivate dopo un
+  // suo timeout) invece di scambiarle per quella attuale
+  unsigned int request_id;
 } MessageRequest;
 
 #define REQ_PAYLOAD_SIZE (sizeof(MessageRequest) - sizeof(long))
@@ -130,6 +135,9 @@ typedef struct message_response {
   pid_t operator_pid;
 
   OrderStatus status;
+
+  // copia di MessageRequest.request_id
+  unsigned int request_id;
 } MessageResponse;
 
 #define RES_PAYLOAD_SIZE (sizeof(MessageResponse) - sizeof(long))

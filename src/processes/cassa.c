@@ -66,10 +66,10 @@ void cleanup_resources(void) {
     detach_shm(g_worker_config);
   }
 
+  LOG_INFO(log_tag, "Chiusura modulo cassa.");
+
   free(log_tag);
   names_destroy();
-
-  LOG_INFO(log_tag, "Chiusura modulo cassa.");
 }
 
 /**
@@ -210,6 +210,7 @@ int main(int argc, char *argv[]) {
         resp.mtype = req.sender_pid;
         resp.operator_pid = getpid();
         resp.status = ORDER_SUCCESS;
+        resp.request_id = req.request_id;
         send_message(g_msg_id, &resp, RES_PAYLOAD_SIZE, 0);
       } else if (bytes == -1) {
         if (errno == EINTR && g_day_signal) {

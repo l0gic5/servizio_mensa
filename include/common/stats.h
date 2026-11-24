@@ -50,6 +50,10 @@ typedef struct global_stats {
   int total_transactions;
 
   int total_user_poverty;
+
+  // ordini evasi (piatto preparato / pagamento registrato) ma abbandonati
+  // dall'utente perché andato in timeout prima della risposta
+  int total_abandoned_orders;
 } GlobalStats;
 
 typedef struct daily_report {
@@ -90,6 +94,8 @@ typedef struct daily_report {
   int leftover_caffe;
 
   int daily_user_poverty;
+
+  int daily_abandoned_orders;
 } DailyReport;
 
 /**

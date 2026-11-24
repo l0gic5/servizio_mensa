@@ -1004,6 +1004,12 @@ static void setup_day_start(int day, GlobalStats *start_snapshot) {
   g_worker_config->current_day = day;
   memset(g_groups->arrived_count, 0, sizeof(int) * MAX_GROUPS);
 
+  // reset barriere di gruppo: gettoni avanzati dal giorno precedente (membri
+  // in timeout o che hanno rinunciato) farebbero passare subito il gruppo
+  for (int i = 0; i < MAX_GROUPS; i++) {
+    init_sem(g_sem_id, SEM_GROUP_BARRIER_BASE + i, 0);
+  }
+
   generate_daily_menu(&g_kitchen->todays_menu, &g_config);
 
   char buf_primi[512];
@@ -1143,6 +1149,8 @@ static void compute_daily_report(DailyReport *report, int day,
 
   report->daily_user_poverty =
       end->total_user_poverty - start->total_user_poverty;
+  report->daily_abandoned_orders =
+      end->total_abandoned_orders - start->total_abandoned_orders;
 }
 
 /**
